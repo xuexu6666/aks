@@ -1,7 +1,13 @@
-# Installs the nvidia container-toolkit BINARIES to /usr/local/nvidia/toolkit on
-# each GB node — WITHOUT configuring containerd (03-nvidia-runtime.sh does that
-# additively). `nvidia-ctk toolkit install` is the granular NVIDIA install path
-# (the same the GPU Operator uses internally, minus the runtime-configure step).
+# Installs the nvidia container-toolkit BINARIES + runtime config to
+# /usr/local/nvidia/toolkit on each GB node, WITHOUT touching AKS's
+# /etc/containerd/config.toml (03-nvidia-runtime.sh wires containerd additively).
+#
+# How: run the operator's own installer (/work/nvidia-ctk-installer) with
+#   --restart-mode none  (don't restart containerd)
+# and DO NOT mount the host /etc/containerd — so the installer's drop-in write
+# stays inside the pod and the host containerd config is left intact. It still
+# drops the binaries + the runtime config (mode=legacy, driverRoot=/run/nvidia/driver)
+# onto the host via the /usr/local/nvidia mount.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata: {name: nvidia-toolkit-install, namespace: nvidia}
@@ -20,16 +26,18 @@ spec:
         args:
         - |
           set -e
-          # install binaries + wrappers + runtime config into the host toolkit dir
-          /artifacts/deb/usr/bin/nvidia-ctk --quiet toolkit install \
-            --toolkit-root=/host/usr/local/nvidia/toolkit \
-            --nvidia-driver-root=__DRIVER_ROOT__ \
-            --nvidia-cdi-hook-path=/usr/local/nvidia/toolkit/nvidia-cdi-hook \
-            || cp -a /artifacts/deb/usr/bin/. /host/usr/local/nvidia/toolkit/ 2>/dev/null || true
-          echo "toolkit installed to /usr/local/nvidia/toolkit"
-          ls /host/usr/local/nvidia/toolkit/nvidia-container-runtime >/dev/null && echo OK
-          sleep infinity
+          /work/nvidia-ctk-installer --no-daemon --runtime containerd \
+            --toolkit-install-dir /usr/local/nvidia \
+            --nvidia-driver-root __DRIVER_ROOT__ \
+            --nvidia-container-runtime.mode legacy \
+            --restart-mode none \
+            --config /tmp/ignore-containerd.toml \
+            --config-source file
+          test -x /usr/local/nvidia/toolkit/nvidia-container-runtime && echo "TOOLKIT_INSTALL_OK"
+          while true; do sleep 3600; done
         volumeMounts:
-        - {name: host, mountPath: /host}
+        - {name: nvidia, mountPath: /usr/local/nvidia}
       volumes:
-      - {name: host, hostPath: {path: /}}
+      # host /usr/local/nvidia — binaries land here at .../toolkit (must match the
+      # host path so the generated wrapper scripts reference the right location).
+      - {name: nvidia, hostPath: {path: /usr/local/nvidia, type: DirectoryOrCreate}}

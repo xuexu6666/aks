@@ -44,9 +44,17 @@ AgentBaker `cse_config.sh:startNvidiaManagedExpServices` +
    `nvidia.com/gpu`; GPUs + driver libs are injected by the runtime. **No
    privileged, no hostPath, no direct driver-mount.**
 
-For cross-node IB (Path B), the **`k8s-rdma-shared-dev-plugin`** advertises
-`rdma/shared_ib`; a worker requests it and gets `/dev/infiniband` (all 4 CX-8
-NICs, shared mode) without hostNetwork (AKS shared RDMA-netns).
+For cross-node IB (Path B), the worker mounts **`/dev/infiniband` directly**
+(privileged) — AKS shared RDMA-netns mode gives verbs access without hostNetwork.
+NCCL uses the inbox uverbs devices; GDR via inbox dmabuf.
+
+> **The `k8s-rdma-shared-dev-plugin` does NOT work on GB300.** It requires a full
+> uverbs + **umad** + rdma_cm char-device set per device, but GB300 IB VFs expose
+> **no umad (MAD) device** (`/sys/class/infiniband/mlx5_N/device/infiniband_mad`
+> is absent — MAD is a PF-only function on these VFs). So it discovers the 4 NICs
+> but advertises `rdma/shared_ib: 0`. It's left in the repo (off by default,
+> `WITH_RDMA=false`) for SKUs whose VFs expose umad; on GB300 use the direct
+> `/dev/infiniband` mount above, or DRA/dranet.
 
 ## ⚠️ Why NOT the GPU-operator toolkit / CDI
 
@@ -66,14 +74,19 @@ the inbox **dmabuf** path, which NCCL auto-selects.
 
 | Path | Mechanism | Result | Status |
 |---|---|---|---|
-| A — intra-node NVLink (4 GPU) | device plugin: `nvidia.com/gpu:4`, runtimeClass nvidia | **~620 GB/s** | ✅ validated on-cluster via device plugin |
-| B — cross-node IB / RDMA | device plugin: `nvidia.com/gpu:1` + `rdma/shared_ib:1` | ~88 GB/s (dmabuf GDR) | GPU-injection = same as A (validated); RDMA plugin advertises the resource; the ~88 GB/s number was confirmed via the direct-mount equivalent |
-| C — cross-node NVLink (MNNVL) | device plugin GPU + IMEX + channel mount | ~595 GB/s | GPU-injection validated; MNNVL/IMEX confirmed via the direct-mount equivalent |
+| A — intra-node NVLink (4 GPU) | device plugin: `nvidia.com/gpu:4`, runtimeClass nvidia | **~631 GB/s** | ✅ validated end-to-end from scratch (`setup.sh` 00→06a) |
+| B — cross-node IB / RDMA | device-plugin GPU (`nvidia.com/gpu:1`) + direct `/dev/infiniband` | ~88 GB/s (dmabuf GDR) | GPU-injection = same as A (validated); IB transport proven on these nodes; RDMA shared plugin N/A on GB300 (no umad) |
+| C — cross-node NVLink (MNNVL) | device-plugin GPU + IMEX + channel mount | ~595 GB/s | GPU-injection validated; MNNVL/IMEX proven on these nodes |
 
-The **runtime wiring**, **device plugin (`nvidia.com/gpu`)**, and **Path A** were
-validated end-to-end on the cluster via the device-plugin model. B/C reuse the
-identical GPU-injection path; their IB/IMEX transports were proven on the same
-nodes (see the direct-mount history / the wiki writeup).
+The whole flow was **re-run from an empty cluster** (`00-cluster.sh` → … →
+`06-nccl.sh a`) to validate the scripts. Path A hit **631 GB/s** via the
+device-plugin model. Bugs found + fixed during that run: `01` aborted under
+`set -e` on the expected GB300 capacity `AllocationFailed` (now tolerated); `03`
+used a non-existent `nvidia-ctk toolkit install` (now the real
+`/work/nvidia-ctk-installer --restart-mode none`); toolkit installer needed a
+numeric `sleep`; `03` now skips capacity-failed VMSS instances. B/C reuse the
+identical (validated) GPU-injection path; their IB/IMEX transports were proven on
+the same nodes.
 
 ## Files
 
@@ -91,7 +104,7 @@ nodes (see the direct-mount history / the wiki writeup).
 | `manifests/runtimeclass-nvidia.yaml` | `nvidia` RuntimeClass |
 | `manifests/toolkit-install-daemonset.yaml` | install toolkit binaries (no containerd config) |
 | `manifests/nvidia-device-plugin.yaml` | GPU device plugin (runtimeClass nvidia) |
-| `manifests/rdma-shared-dev-plugin.yaml` | RDMA shared device plugin (`rdma/shared_ib`) |
+| `manifests/rdma-shared-dev-plugin.yaml` | RDMA shared device plugin (`rdma/shared_ib`) — off by default; N/A on GB300 (no umad on VFs) |
 | `manifests/nccl-{nvlink,ib,mnnvl}.yaml` | NCCL Path A/B/C (device-plugin model) |
 | `setup.sh` / `cleanup.sh` | orchestrator / teardown |
 

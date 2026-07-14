@@ -20,7 +20,8 @@ else
     --os-sku Ubuntu2404 \
     --gpu-driver None \
     --node-taints "${GPU_TAINT}" \
-    --aks-custom-headers "AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}"
+    --aks-custom-headers "AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}" \
+    || warn "nodepool add returned non-zero — expected when GB300 capacity caps the pinned availability set below ${NODE_COUNT}. Continuing; the readiness check below decides if we have enough."
   ok "Node pool create submitted"
 fi
 

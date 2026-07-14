@@ -1,7 +1,9 @@
-# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU, DEVICE-PLUGIN model.
-# Each worker requests nvidia.com/gpu:1 (GPU+libs via nvidia runtime) AND
-# rdma/shared_ib:1 (all 4 IB NICs via the RDMA shared plugin, shared mode).
-# No privileged, no hostNetwork (AKS shared RDMA-netns). GDR via inbox dmabuf.
+# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU.
+# GPU comes via the DEVICE PLUGIN (runtimeClassName nvidia + nvidia.com/gpu).
+# IB comes via a direct /dev/infiniband mount (privileged) — AKS shared RDMA-netns
+# mode gives verbs access without hostNetwork. NCCL uses the inbox uverbs devices;
+# GDR via inbox dmabuf. (The k8s-rdma-shared-dev-plugin is NOT used here: GB300 IB
+# VFs expose no umad device, so it can't advertise the resource — see README.)
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata:
@@ -45,7 +47,11 @@ spec:
           containers:
           - name: worker
             image: __NCCL_IMAGE__
+            securityContext: {privileged: true}
             resources:
               limits:
                 nvidia.com/gpu: "1"
-                rdma/shared_ib: "1"
+            volumeMounts:
+            - {name: infiniband, mountPath: /dev/infiniband}
+          volumes:
+          - {name: infiniband, hostPath: {path: /dev/infiniband}}

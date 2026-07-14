@@ -3,7 +3,11 @@
 # IB, rdma/shared_ib. Requires 03-nvidia-runtime.sh (nvidia runtime + RuntimeClass).
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
-WITH_RDMA="${WITH_RDMA:-true}"   # set false to skip the RDMA plugin
+# RDMA shared device plugin is OFF by default: it requires uverbs+umad+rdma_cm per
+# device, but GB300 IB VFs expose NO umad (MAD) device, so it advertises 0. Cross-node
+# IB (Path B) instead injects /dev/infiniband directly (see nccl-ib.yaml). Set
+# WITH_RDMA=true only on SKUs whose VFs expose umad.
+WITH_RDMA="${WITH_RDMA:-false}"
 
 log "Deploying nvidia-device-plugin (runtimeClassName: nvidia)"
 kubectl apply -f manifests/nvidia-device-plugin.yaml

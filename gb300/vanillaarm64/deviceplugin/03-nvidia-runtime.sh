@@ -53,7 +53,8 @@ sleep 5
 echo "containerd: $(systemctl is-active containerd)"
 REMOTE
 
-for id in $(az vmss list-instances -g "${NODE_RG}" -n "${VMSS}" --query "[].instanceId" -o tsv); do
+# only active (Succeeded) instances — GB300 capacity can leave failed instances in the model
+for id in $(az vmss list-instances -g "${NODE_RG}" -n "${VMSS}" --query "[?provisioningState=='Succeeded'].instanceId" -o tsv); do
   log "Wiring containerd on instance ${id}"
   az vmss run-command invoke --subscription "${SUBSCRIPTION}" -g "${NODE_RG}" -n "${VMSS}" \
     --instance-id "${id}" --command-id RunShellScript --scripts @/tmp/_wire_containerd.sh \
