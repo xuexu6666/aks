@@ -1,0 +1,10 @@
+gpuResourcesEnabledOverride: true
+nvidiaDriverRoot: "/run/nvidia/driver"
+resources:
+  computeDomains:
+    enabled: false
+kubeletPlugin:
+  tolerations:
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: CriticalAddonsOnly, operator: Exists}

@@ -1,0 +1,49 @@
+# GPU Operator values — DRIVER ONLY.
+#
+# Why so minimal:
+#  * toolkit.enabled=false  — the operator container-toolkit rewrites AKS's
+#    /etc/containerd/config.toml and crash-loops containerd 2.3.2 (nodes go
+#    NotReady). We do GPU injection by mounting the driver rootfs directly
+#    into pods instead (see nccl-*.yaml).
+#  * devicePlugin/dcgm/gfd disabled — they depend on toolkit-validation, which
+#    never passes without the toolkit.
+#  * driver.rdma.enabled=false — avoids the "waiting for MOFED" hang; GDR works
+#    via the inbox dmabuf path, not nvidia-peermem (kernel dropped the legacy
+#    peer-memory API).
+#  * kernelModuleType=open — Blackwell supports only the open modules.
+nfd:
+  enabled: true
+daemonsets:
+  tolerations:
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+driver:
+  enabled: true
+  kernelModuleType: "open"
+  rdma:
+    enabled: false
+toolkit:
+  enabled: false
+devicePlugin:
+  enabled: false
+migManager:
+  enabled: false
+vgpuDeviceManager:
+  enabled: false
+vfioManager:
+  enabled: false
+sandboxDevicePlugin:
+  enabled: false
+dcgm:
+  enabled: false
+dcgmExporter:
+  enabled: false
+gfd:
+  enabled: false
+node-feature-discovery:
+  worker:
+    tolerations:
+    - {key: "node-role.kubernetes.io/master", operator: "Equal", value: "", effect: "NoSchedule"}
+    - {key: "node-role.kubernetes.io/control-plane", operator: "Equal", value: "", effect: "NoSchedule"}
+    - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+    - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
