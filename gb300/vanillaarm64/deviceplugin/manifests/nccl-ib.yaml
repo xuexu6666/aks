@@ -1,0 +1,53 @@
+# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU, force IB, GDR via dmabuf.
+# No hostNetwork (AKS shared-RDMA-netns mode gives IB to privileged pods and
+# avoids the sshd port-22 clash under mpi-operator).
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-ib
+  namespace: __NAMESPACE__
+spec:
+  slotsPerWorker: 1
+  runPolicy: {cleanPodPolicy: Running}
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
+          containers:
+          - name: launcher
+            image: __NCCL_IMAGE__
+            command: ["/bin/bash","-lc"]
+            args:
+            - |
+              export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:__DRIVER_LIB__
+              sleep 20
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                -x LD_LIBRARY_PATH -x PATH \
+                -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NET \
+                -x NCCL_IB_DISABLE=0 -x NCCL_IB_HCA=mlx5 \
+                -x NCCL_NET_GDR_LEVEL=SYS \
+                -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 -x NCCL_SHM_DISABLE=1 \
+                -x NCCL_SOCKET_IFNAME=eth0 \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-ib}}
+                topologyKey: kubernetes.io/hostname
+          containers:
+          - name: worker
+            image: __NCCL_IMAGE__
+            securityContext: {privileged: true}
+            volumeMounts:
+            - {name: driver, mountPath: __DRIVER_ROOT__, mountPropagation: HostToContainer}
+            - {name: dev, mountPath: /dev}
+          volumes:
+          - {name: driver, hostPath: {path: __DRIVER_ROOT__}}
+          - {name: dev, hostPath: {path: /dev}}

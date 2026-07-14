@@ -1,0 +1,28 @@
+# Path A — intra-node NVLink: single pod, 4 GPUs, all_reduce_perf.
+# GPU access via direct driver-mount (no device plugin / toolkit / CDI).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-nvlink
+  namespace: __NAMESPACE__
+spec:
+  restartPolicy: Never
+  tolerations:
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  containers:
+  - name: nccl
+    image: __NCCL_IMAGE__
+    command: ["/bin/bash","-lc"]
+    args:
+    - |
+      export PATH=__DRIVER_ROOT__/usr/bin:$PATH
+      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:__DRIVER_LIB__
+      nvidia-smi -L
+      /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 4
+    securityContext: {privileged: true}
+    volumeMounts:
+    - {name: driver, mountPath: __DRIVER_ROOT__, mountPropagation: HostToContainer}
+    - {name: dev, mountPath: /dev}
+  volumes:
+  - {name: driver, hostPath: {path: __DRIVER_ROOT__}}
+  - {name: dev, hostPath: {path: /dev}}
