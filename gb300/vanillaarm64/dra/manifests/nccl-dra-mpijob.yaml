@@ -1,3 +1,10 @@
+# NCCL cross-node IB via DRA: each worker claims a GPU + its aligned IB NIC
+# (gpu-nic-aligned). Validated ~88 GB/s (NET/IB Data-Direct, GDR via dmabuf).
+#
+# IMPORTANT: the Launcher MUST run on a NON-GPU node (nodeSelector agentpool=system).
+# dranet's NRI hook is active on GB nodes and disturbs the pod OOB path, so a
+# launcher on a GB node makes OpenMPI's orted callback fail ("ORTE ... no route").
+# On a clean CPU node the launch succeeds. Workers stay on GB nodes.
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata: {name: nccl-test-dra}
@@ -9,7 +16,7 @@ spec:
       replicas: 1
       template:
         spec:
-          tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
+          nodeSelector: {agentpool: system}   # launcher on a NON-GPU node (see note above)
           containers:
           - name: nccl
             image: ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu24.04-nccl2.29.2-1-d73ec07
@@ -17,11 +24,17 @@ spec:
             args:
             - |
               sleep 15
-              mpirun -np 2 --allow-run-as-root -bind-to none -mca routed direct -mca oob_tcp_if_include eth0 -mca btl_tcp_if_include eth0 -mca plm_rsh_no_tree_spawn 1 -x LD_LIBRARY_PATH -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NET -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=0 -x NCCL_SHM_DISABLE=1 -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 -x NCCL_NET_GDR_LEVEL=SYS -x NCCL_IB_HCA=mlx5 /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                -x LD_LIBRARY_PATH -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NET \
+                -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=0 -x NCCL_IB_HCA=mlx5 \
+                -x NCCL_SHM_DISABLE=1 -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 \
+                -x NCCL_NET_GDR_LEVEL=SYS \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
     Worker:
       replicas: 2
       template:
         spec:
+          runtimeClassName: nvidia
           tolerations:
           - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
           - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
