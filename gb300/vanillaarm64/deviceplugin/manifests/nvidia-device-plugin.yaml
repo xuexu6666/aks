@@ -1,0 +1,31 @@
+# NVIDIA k8s device plugin — advertises nvidia.com/gpu.
+# runtimeClassName: nvidia is the trick that makes it work WITHOUT the operator
+# toolkit: the nvidia runtime's prestart hook injects NVML into the plugin pod
+# itself (NVIDIA_VISIBLE_DEVICES=all), so it can enumerate GPUs and advertise
+# the resource. Driver root is /run/nvidia/driver (operator driver).
+# NOTE: --pass-device-specs is intentionally OMITTED — it references
+# /dev/nvidia-modeset which is absent on the GB host; the runtime hook creates
+# the device nodes itself.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: nvidia-device-plugin, namespace: nvidia}
+spec:
+  selector: {matchLabels: {app: nvidia-device-plugin}}
+  template:
+    metadata: {labels: {app: nvidia-device-plugin}}
+    spec:
+      runtimeClassName: nvidia
+      priorityClassName: system-node-critical
+      nodeSelector: {agentpool: gb300}
+      tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
+      containers:
+      - name: nvidia-device-plugin
+        image: nvcr.io/nvidia/k8s-device-plugin:v0.17.1
+        env:
+        - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+        - {name: NVIDIA_DRIVER_CAPABILITIES, value: all}
+        securityContext: {privileged: true}
+        volumeMounts:
+        - {name: kubelet, mountPath: /var/lib/kubelet/device-plugins}
+      volumes:
+      - {name: kubelet, hostPath: {path: /var/lib/kubelet/device-plugins}}

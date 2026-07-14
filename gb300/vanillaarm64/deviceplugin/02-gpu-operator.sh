@@ -30,4 +30,4 @@ log "Verifying GPUs via nvidia-smi in the driver pod"
 kubectl exec -n "${NAMESPACE}" "${DP}" -c nvidia-driver-ctr -- nvidia-smi -L \
   || die "nvidia-smi failed — driver did not build/load. This is the Experiment-1 gate."
 ok "Driver up: open R580 built against linux-azure-nvidia arm64, GPUs enumerated."
-warn "Note: no nvidia.com/gpu resource is advertised — GPU injection is via direct driver-mount (see nccl-*.yaml), not the k8s device plugin."
+warn "nvidia.com/gpu is not advertised yet — that comes after 03-nvidia-runtime.sh (wire runtime) + 04-device-plugin.sh (device plugin)."

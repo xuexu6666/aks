@@ -4,9 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
 
-log "Removing NCCL jobs + mpi-operator"
+log "Removing NCCL jobs + mpi-operator artifacts"
 kubectl delete pod -n "${NAMESPACE}" nccl-nvlink --ignore-not-found >/dev/null 2>&1 || true
 kubectl delete mpijob -n "${NAMESPACE}" nccl-ib nccl-mnnvl --ignore-not-found >/dev/null 2>&1 || true
+
+log "Removing device plugins + toolkit installer"
+kubectl delete -f manifests/nvidia-device-plugin.yaml --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete -f manifests/rdma-shared-dev-plugin.yaml --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete ds -n "${NAMESPACE}" nvidia-toolkit-install --ignore-not-found >/dev/null 2>&1 || true
 
 log "Uninstalling gpu-operator"
 helm uninstall gpu-operator -n "${NAMESPACE}" 2>/dev/null || true
@@ -25,4 +30,4 @@ if [ "${1:-}" = "--nodepool" ]; then
   log "Deleting GB300 node pool"
   az aks nodepool delete --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n "${NODEPOOL}"
 fi
-ok "Cleanup done."
+ok "Cleanup done. (The containerd nvidia-runtime block + toolkit binaries remain on nodes; reimage the pool to fully reset.)"

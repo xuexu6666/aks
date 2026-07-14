@@ -1,0 +1,35 @@
+# Installs the nvidia container-toolkit BINARIES to /usr/local/nvidia/toolkit on
+# each GB node — WITHOUT configuring containerd (03-nvidia-runtime.sh does that
+# additively). `nvidia-ctk toolkit install` is the granular NVIDIA install path
+# (the same the GPU Operator uses internally, minus the runtime-configure step).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: nvidia-toolkit-install, namespace: nvidia}
+spec:
+  selector: {matchLabels: {app: nvidia-toolkit-install}}
+  template:
+    metadata: {labels: {app: nvidia-toolkit-install}}
+    spec:
+      nodeSelector: {agentpool: gb300}
+      tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
+      containers:
+      - name: install
+        image: __TOOLKIT_IMAGE__
+        securityContext: {privileged: true}
+        command: ["/bin/sh","-c"]
+        args:
+        - |
+          set -e
+          # install binaries + wrappers + runtime config into the host toolkit dir
+          /artifacts/deb/usr/bin/nvidia-ctk --quiet toolkit install \
+            --toolkit-root=/host/usr/local/nvidia/toolkit \
+            --nvidia-driver-root=__DRIVER_ROOT__ \
+            --nvidia-cdi-hook-path=/usr/local/nvidia/toolkit/nvidia-cdi-hook \
+            || cp -a /artifacts/deb/usr/bin/. /host/usr/local/nvidia/toolkit/ 2>/dev/null || true
+          echo "toolkit installed to /usr/local/nvidia/toolkit"
+          ls /host/usr/local/nvidia/toolkit/nvidia-container-runtime >/dev/null && echo OK
+          sleep infinity
+        volumeMounts:
+        - {name: host, mountPath: /host}
+      volumes:
+      - {name: host, hostPath: {path: /}}

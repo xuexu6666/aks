@@ -1,6 +1,7 @@
-# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU, force IB, GDR via dmabuf.
-# No hostNetwork (AKS shared-RDMA-netns mode gives IB to privileged pods and
-# avoids the sshd port-22 clash under mpi-operator).
+# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU, DEVICE-PLUGIN model.
+# Each worker requests nvidia.com/gpu:1 (GPU+libs via nvidia runtime) AND
+# rdma/shared_ib:1 (all 4 IB NICs via the RDMA shared plugin, shared mode).
+# No privileged, no hostNetwork (AKS shared RDMA-netns). GDR via inbox dmabuf.
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata:
@@ -21,7 +22,6 @@ spec:
             command: ["/bin/bash","-lc"]
             args:
             - |
-              export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:__DRIVER_LIB__
               sleep 20
               mpirun -np 2 --allow-run-as-root -bind-to none \
                 -x LD_LIBRARY_PATH -x PATH \
@@ -35,6 +35,7 @@ spec:
       replicas: 2
       template:
         spec:
+          runtimeClassName: nvidia
           tolerations: [{key: sku, value: gpu, operator: Equal, effect: NoSchedule}]
           affinity:
             podAntiAffinity:
@@ -44,10 +45,7 @@ spec:
           containers:
           - name: worker
             image: __NCCL_IMAGE__
-            securityContext: {privileged: true}
-            volumeMounts:
-            - {name: driver, mountPath: __DRIVER_ROOT__, mountPropagation: HostToContainer}
-            - {name: dev, mountPath: /dev}
-          volumes:
-          - {name: driver, hostPath: {path: __DRIVER_ROOT__}}
-          - {name: dev, hostPath: {path: /dev}}
+            resources:
+              limits:
+                nvidia.com/gpu: "1"
+                rdma/shared_ib: "1"
