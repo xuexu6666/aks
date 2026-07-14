@@ -5,6 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
 
 log "GB300 vanilla-arm64 GPU setup — device-plugin model — full run"
+./00-cluster.sh         # resource group + AKS cluster (system pool)
 ./01-nodepool.sh        # GB300 pool on vanilla arm64 (--gpu-driver None)
 ./02-gpu-operator.sh    # GPU Operator, DRIVER ONLY -> open R580 DKMS
 ./03-nvidia-runtime.sh  # install toolkit binaries + wire nvidia runtime into containerd (AKS-native)

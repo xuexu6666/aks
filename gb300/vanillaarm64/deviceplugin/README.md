@@ -9,12 +9,13 @@ runs the NCCL matrix. No bespoke GB VHD, **no OFED, no peermem**, and — crucia
 ```bash
 cd gb300/vanillaarm64/deviceplugin
 # edit variables.sh (subscription / rg / cluster / counts) or override via env
-./setup.sh   # 01 nodepool -> 02 driver -> 03 runtime -> 04 device-plugin -> 05 imex -> 06 nccl
+./setup.sh   # 00 cluster -> 01 nodepool -> 02 driver -> 03 runtime -> 04 device-plugin -> 05 imex -> 06 nccl
 ```
 
 Individual steps:
 
 ```bash
+./00-cluster.sh        # resource group + AKS cluster (system pool)   [skip if cluster exists]
 ./01-nodepool.sh       # GB300 pool on vanilla arm64 (--gpu-driver None, sku=gpu taint)
 ./02-gpu-operator.sh   # GPU Operator, DRIVER ONLY (toolkit off) -> open R580 DKMS build
 ./03-nvidia-runtime.sh # install toolkit binaries + wire nvidia runtime into containerd (AKS-native)
@@ -79,6 +80,7 @@ nodes (see the direct-mount history / the wiki writeup).
 | File | Purpose |
 |---|---|
 | `variables.sh` | config (env-overridable) + helpers |
+| `00-cluster.sh` | resource group + AKS cluster (system pool) |
 | `01-nodepool.sh` | GB300 pool on the pinned vanilla arm64 image |
 | `02-gpu-operator.sh` | GPU Operator (driver only) + verify `nvidia-smi` |
 | `03-nvidia-runtime.sh` | install toolkit binaries + additively wire nvidia runtime into containerd + RuntimeClass |
@@ -95,8 +97,9 @@ nodes (see the direct-mount history / the wiki writeup).
 
 ## Prerequisites
 
-`az` (logged in), `kubectl`, `helm`, Kubernetes ≥ 1.31, and the AKS cluster already
-created (this adds the GPU node pool). GB300 lives in a capacity-constrained pinned
+`az` (logged in), `kubectl`, `helm`, Kubernetes ≥ 1.31. `00-cluster.sh` creates the
+resource group + cluster (or skips if they exist); `01-nodepool.sh` adds the GPU
+pool. GB300 lives in a capacity-constrained pinned
 availability set — 18 requested may land fewer; ≥2 Ready is enough for all paths.
 
 ## Per-NIC isolation (not this folder)

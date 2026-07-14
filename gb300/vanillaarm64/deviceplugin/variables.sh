@@ -8,6 +8,10 @@ export RESOURCE_GROUP="${RESOURCE_GROUP:-gb300-test-rg}"
 export CLUSTER_NAME="${CLUSTER_NAME:-gb300}"
 export REGION="${REGION:-eastus2}"
 
+# --- System pool (control-plane workloads; created with the cluster) ---------
+export SYSTEM_VM_SIZE="${SYSTEM_VM_SIZE:-Standard_D4s_v5}"
+export SYSTEM_POOL_SIZE="${SYSTEM_POOL_SIZE:-1}"
+
 # --- GPU node pool -----------------------------------------------------------
 export NODEPOOL="${NODEPOOL:-gb300}"
 export VM_SIZE="${VM_SIZE:-Standard_ND128isr_GB300_v6}"
