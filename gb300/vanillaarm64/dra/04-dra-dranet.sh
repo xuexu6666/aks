@@ -8,10 +8,24 @@ DRA_DRIVER_VERSION="${DRA_DRIVER_VERSION:-25.12.0}"
 helm repo add nvidia https://helm.ngc.nvidia.com/nvidia >/dev/null 2>&1 || true
 helm repo update nvidia >/dev/null 2>&1
 
-log "Installing nvidia-dra-driver-gpu ${DRA_DRIVER_VERSION} (GPU ResourceSlices)"
+log "Installing nvidia-dra-driver-gpu ${DRA_DRIVER_VERSION} (GPU ResourceSlices + ComputeDomains)"
 helm upgrade --install nvidia-dra-driver-gpu nvidia/nvidia-dra-driver-gpu \
   --version "${DRA_DRIVER_VERSION}" --namespace "${NAMESPACE}" \
   -f manifests/values-dra.yaml
+
+# The ComputeDomains controller ships with a hardcoded affinity for
+# node-role.kubernetes.io/control-plane nodes, which DON'T exist on AKS (managed
+# control plane) -> it stays Pending and never creates ComputeDomain channels.
+# Retarget it to a system (non-GPU) node.
+log "Retargeting ComputeDomains controller off control-plane affinity (AKS has none)"
+for i in $(seq 1 12); do
+  kubectl get deploy -n "${NAMESPACE}" nvidia-dra-driver-gpu-controller >/dev/null 2>&1 && break
+  sleep 5
+done
+kubectl patch deploy -n "${NAMESPACE}" nvidia-dra-driver-gpu-controller --type=json -p='[
+  {"op":"remove","path":"/spec/template/spec/affinity"},
+  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"agentpool":"system"}}
+]' 2>/dev/null || warn "controller patch skipped (already patched or absent)"
 
 log "Deploying dranet (IB-NIC ResourceSlices)"
 kubectl apply -f manifests/dranet/

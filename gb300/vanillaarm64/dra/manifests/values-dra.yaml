@@ -1,9 +1,20 @@
+# NVIDIA DRA driver values.
+#  - gpuResourcesEnabledOverride: publish GPU ResourceSlices.
+#  - computeDomains.enabled: true -> ComputeDomains (DRA-automated IMEX) for
+#    cross-node NVLink / MNNVL.
+#  - driverRoot points at the operator's containerized driver.
+#  - tolerations so the kubelet-plugin (and CD controller) run on GB nodes.
 gpuResourcesEnabledOverride: true
 nvidiaDriverRoot: "/run/nvidia/driver"
 resources:
   computeDomains:
-    enabled: false
+    enabled: true
 kubeletPlugin:
+  tolerations:
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: CriticalAddonsOnly, operator: Exists}
+controller:
   tolerations:
   - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
   - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}

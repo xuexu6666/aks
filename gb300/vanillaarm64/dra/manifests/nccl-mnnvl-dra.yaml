@@ -1,0 +1,79 @@
+# Cross-node NVLink (MNNVL) via DRA ComputeDomains. Validated ~595 GB/s (NVLS).
+#
+# ComputeDomains is the DRA-automated IMEX: the ComputeDomain CR makes the DRA
+# driver create the channel ResourceClaimTemplate (nccl-cd-channel) and run the
+# IMEX daemons across the pods that claim it — no manual /etc/nvidia-imex config.
+# Each worker claims a GPU (gpu-only) + the CD channel; IB is disabled so the
+# transport is NVLink/NVLS over the switch fabric.
+#
+# Requires: DRA driver installed with computeDomains.enabled=true (see
+# values-dra.yaml) and its controller scheduled (see 04-dra-dranet.sh patch).
+# Launcher pinned to a NON-GPU node (same reason as the IB job).
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata: {name: nccl-cd}
+spec:
+  numNodes: 2
+  channel:
+    resourceClaimTemplate:
+      name: nccl-cd-channel
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: gpu-only}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly: {deviceClassName: gpu.nvidia.com, count: 1}
+---
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata: {name: nccl-mnnvl-dra}
+spec:
+  slotsPerWorker: 1
+  runPolicy: {cleanPodPolicy: Running}
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          nodeSelector: {agentpool: system}
+          containers:
+          - name: nccl
+            image: ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu24.04-nccl2.29.2-1-d73ec07
+            command: ["/bin/bash","-c"]
+            args:
+            - |
+              sleep 20
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                -x LD_LIBRARY_PATH -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NVLS,GRAPH \
+                -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=1 \
+                -x NCCL_NVLS_ENABLE=1 -x NCCL_MNNVL_ENABLE=1 \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          runtimeClassName: nvidia
+          tolerations:
+          - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+          - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-mnnvl-dra, training.kubeflow.org/job-role: worker}}
+                topologyKey: kubernetes.io/hostname
+          automountServiceAccountToken: false
+          resourceClaims:
+          - {name: gpu, resourceClaimTemplateName: gpu-only}
+          - {name: imex-channel, resourceClaimTemplateName: nccl-cd-channel}
+          containers:
+          - name: nccl
+            image: ghcr.io/coreweave/nccl-tests:12.9.1-devel-ubuntu24.04-nccl2.29.2-1-d73ec07
+            resources:
+              claims:
+              - {name: gpu}
+              - {name: imex-channel}
+            securityContext: {privileged: true}

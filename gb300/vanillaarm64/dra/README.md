@@ -26,19 +26,32 @@ cd gb300/vanillaarm64/dra
 So the **DRA allocation + injection works end-to-end** — the hard part that Anson's
 dranet fork enables for AKS IB-only VFs.
 
-## ✅ Cross-node NCCL — WORKING (~88 GB/s)
+## ✅ Cross-node NCCL — WORKING (both paths)
 
-2-node `all_reduce_perf` via the DRA `gpu-nic-aligned` claim:
+Run: `./05-nccl-dra.sh ib` | `mnnvl` | `both`.
 
+**Path B — cross-node IB / RDMA (~88 GB/s)** — DRA `gpu-nic-aligned` claim (GPU + IB NIC):
 ```
 NET/IB: Data Direct DMA Interface detected for mlx5_0..3
 GPU Direct RDMA (DMABUF) enabled
 # Avg bus bandwidth : 88.16 GB/s   (exit 0)
 ```
+GPU **and** its IB NIC co-allocated by DRA (`allocated,reserved`); dranet injects the NIC's RDMA devices.
 
-Same GDR-via-dmabuf transport as the device-plugin variant — but here the GPU **and**
-its IB NIC are co-allocated by DRA (the claim shows `allocated,reserved`) and dranet
-injects the NIC's RDMA devices into the worker.
+**Path C — cross-node NVLink / MNNVL (~595 GB/s)** — DRA **ComputeDomains** (automated IMEX):
+```
+via P2P / NVLS (NCCL_IB_DISABLE=1)
+# Avg bus bandwidth : 594.9 GB/s   (exit 0)
+```
+The `ComputeDomain` CR makes the DRA driver create the `nccl-cd-channel` claim template
+and run the **IMEX daemons across the workers automatically** — the DRA equivalent of
+the device-plugin variant's manual `nvidia-imex` bring-up (no `/etc/nvidia-imex` config).
+Each worker claims a **GPU + the CD channel**; IB disabled → NVLink/NVLS transport.
+
+> **ComputeDomains gotcha on AKS:** the DRA driver's CD *controller* ships with a
+> hardcoded affinity for `node-role.kubernetes.io/control-plane` nodes, which don't
+> exist on AKS (managed control plane) — it stays Pending and never creates the
+> channel template. `04-dra-dranet.sh` patches the controller onto a system node.
 
 ### The one gotcha: the Launcher must run on a NON-GPU node
 
@@ -60,14 +73,16 @@ unhealthy, scale it back up (`az aks nodepool scale ... -n system --node-count 1
 | `00–02`, `variables.sh`, `manifests/values-gpu-operator.yaml` | shared with the device-plugin variant |
 | `03-nri.sh` | enable NRI in containerd |
 | `04-dra-dranet.sh` | install DRA driver + dranet |
-| `05-nccl-dra.sh` | mpi-operator + DRA resources + NCCL MPIJob |
+| `05-nccl-dra.sh` | mpi-operator + DRA resources + NCCL MPIJob — arg `ib` (default) / `mnnvl` / `both`; prechecks a non-GPU launcher node |
 | `manifests/values-dra.yaml` | DRA driver values (driverRoot `/run/nvidia/driver`, ComputeDomains off) |
 | `manifests/dranet/` | dranet RBAC + DaemonSet (Anson's fork `ghcr.io/anson627/dranet`) |
 | `manifests/device-class.yaml` | `dranet.net` DeviceClass |
 | `manifests/resource-claim-template.yaml` | `gpu-nic-aligned` (GPU `0008:06:00.0` + NIC `0101:00:00.0`) |
-| `manifests/nccl-dra-mpijob.yaml` | NCCL MPIJob using the aligned claim (launcher pinned to system pool) |
+| `manifests/nccl-dra-mpijob.yaml` | cross-node IB MPIJob (gpu-nic-aligned claim; launcher on system pool) |
+| `manifests/nccl-mnnvl-dra.yaml` | cross-node MNNVL: `ComputeDomain` + gpu-only claim + MPIJob |
 
 ## DRA vs device plugin
 
-- **device plugin** (`../deviceplugin`): `nvidia.com/gpu` + direct `/dev/infiniband`; simplest; NCCL A/B/C validated (631 / 88 / 595 GB/s).
-- **DRA + dranet** (this): GPU + NIC co-allocated in one claim; cross-node IB NCCL validated at **~88 GB/s** (launcher on a non-GPU node). The productiony model — GPU↔NIC `pcieRoot` NUMA-alignment still falls back to PCI-address selection on AKS (VMBUS), and MNNVL would need ComputeDomains enabled.
+Both deliver working NCCL on GB300; results match:
+- **device plugin** (`../deviceplugin`): `nvidia.com/gpu` + direct `/dev/infiniband` (+ manual IMEX); A/B/C = 631 / 88 / 595 GB/s.
+- **DRA + dranet** (this): GPU+NIC co-allocated in one claim; IB **88 GB/s** + MNNVL **595 GB/s** (ComputeDomains-automated IMEX). The productiony model — the only rough edges on AKS: launcher must sit on a non-GPU node, GPU↔NIC `pcieRoot` alignment falls back to PCI-address selection (VMBUS), and the CD controller needs the control-plane-affinity patch.
