@@ -1,0 +1,25 @@
+# NVIDIA DRA driver values — ComputeDomains ONLY (coexists with the device plugin).
+#
+# In this variant the DEVICE PLUGIN owns GPU allocation (nvidia.com/gpu). We use
+# the DRA driver purely for ComputeDomains — the DRA-automated IMEX that sets up
+# cross-node NVLink (MNNVL) channels, which the device plugin can't do.
+#
+#   gpuResourcesEnabledOverride: false  -> DRA does NOT publish GPU ResourceSlices,
+#                                          so it can't double-allocate GPUs the
+#                                          device plugin already hands out.
+#   computeDomains.enabled: true        -> keep the ComputeDomain / IMEX channel path.
+gpuResourcesEnabledOverride: false
+nvidiaDriverRoot: "/run/nvidia/driver"
+resources:
+  computeDomains:
+    enabled: true
+kubeletPlugin:
+  tolerations:
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: CriticalAddonsOnly, operator: Exists}
+controller:
+  tolerations:
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: CriticalAddonsOnly, operator: Exists}

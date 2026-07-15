@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Step 4 — run the NCCL tests on the full stack.
+#   a  = Path A  intra-node NVLink   (1 pod, 4 GPUs, device plugin)         ~620 GB/s
+#   ib = Path B  cross-node IB/RDMA  (2 nodes x1 GPU, device plugin + /dev/infiniband) ~88 GB/s
+#   mnnvl = Path C cross-node NVLink (2 nodes x1 GPU, device plugin + DRA ComputeDomains) ~595 GB/s
+#   all = a, then ib, then mnnvl
+set -euo pipefail
+cd "$(dirname "$0")"; source ./variables.sh
+
+WHICH="${1:-all}"
+
+apply() { sed -e "s|__NAMESPACE__|${NAMESPACE}|g" -e "s|__NCCL_IMAGE__|${NCCL_IMAGE}|g" "$1" | kubectl apply -f - ; }
+
+ensure_mpi_operator() {
+  if ! kubectl get deploy -n mpi-operator mpi-operator >/dev/null 2>&1; then
+    log "Installing kubeflow mpi-operator v0.7.0"
+    kubectl apply --server-side -k "https://github.com/kubeflow/mpi-operator/manifests/overlays/standalone?ref=v0.7.0"
+  fi
+  # allow the controller onto a GB node if the single system node is busy
+  kubectl patch deploy -n mpi-operator mpi-operator --type=json \
+    -p='[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"sku","value":"gpu","operator":"Equal","effect":"NoSchedule"}]}]' 2>/dev/null || true
+  kubectl wait --for=condition=available deployment/mpi-operator -n mpi-operator --timeout=300s || true
+}
+
+# the MPI launcher must run on a NON-GPU node (a Ready 'system' pool node)
+ensure_launcher_home() {
+  local n; n=$(kubectl get nodes -l agentpool=system --no-headers 2>/dev/null | grep -cw Ready || true)
+  [ "${n:-0}" -ge 1 ] || { warn "no Ready system node for the launcher; scaling system pool to 1"; \
+    az aks nodepool scale --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n system --node-count 1 >/dev/null 2>&1 || true; \
+    kubectl wait --for=condition=Ready node -l agentpool=system --timeout=300s || true; }
+}
+
+run_pod() {  # $1=name $2=manifest  (single Pod)
+  log "Path A — intra-node NVLink"
+  kubectl delete pod "$1" -n "${NAMESPACE}" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  apply "$2"
+  kubectl wait --for=condition=Ready pod/"$1" -n "${NAMESPACE}" --timeout=300s 2>/dev/null || true
+  kubectl logs -f "$1" -n "${NAMESPACE}" 2>&1 | grep -aE "GPU |busbw|Avg bus|error|NVLS|NVLink" || true
+}
+
+run_job() {  # $1=jobname $2=manifest  (MPIJob)
+  log "Launching MPIJob $1 ($2)"
+  kubectl delete mpijob "$1" -n "${NAMESPACE}" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  apply "$2"; sleep 20
+  local L=""
+  for i in $(seq 1 40); do
+    L=$(kubectl get pods -n "${NAMESPACE}" -l training.kubeflow.org/job-name="$1",training.kubeflow.org/job-role=launcher -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+    [ -n "$L" ] && [ "$(kubectl get pod "$L" -n "${NAMESPACE}" -o jsonpath='{.status.phase}' 2>/dev/null)" = "Running" ] && break
+    sleep 15
+  done
+  kubectl logs -f "$L" -n "${NAMESPACE}" 2>&1 | grep -aE "GPU |via NET|GDRDMA|DMABUF|MNNVL|NVLS|busbw|Avg bus|no route|error" || true
+}
+
+case "${WHICH}" in
+  a)      run_pod nccl-nvlink manifests/nccl-nvlink.yaml ;;
+  ib)     ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib    manifests/nccl-ib.yaml ;;
+  mnnvl)  ensure_mpi_operator; ensure_launcher_home; run_job nccl-mnnvl manifests/nccl-mnnvl.yaml ;;
+  all)    run_pod nccl-nvlink manifests/nccl-nvlink.yaml
+          ensure_mpi_operator; ensure_launcher_home
+          run_job nccl-ib    manifests/nccl-ib.yaml
+          run_job nccl-mnnvl manifests/nccl-mnnvl.yaml ;;
+  *) die "usage: $0 [a|ib|mnnvl|all]" ;;
+esac
+ok "NCCL run(s) complete. Expected: A ~620, IB ~88, MNNVL ~595 GB/s."

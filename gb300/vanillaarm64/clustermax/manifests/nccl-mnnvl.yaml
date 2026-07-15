@@ -1,0 +1,67 @@
+# Path C — cross-node NVLink (MNNVL) with the DEVICE PLUGIN + DRA ComputeDomains.
+#
+# GPUs come from the device plugin (runtimeClassName nvidia + nvidia.com/gpu), and
+# DRA ComputeDomains provides the IMEX channel automatically (no manual
+# /etc/nvidia-imex). So each worker gets: nvidia.com/gpu:1 (device plugin) + the
+# nccl-cd-channel resource claim (DRA). IB is disabled -> NVLink/NVLS transport.
+#
+# Requires: DRA driver with computeDomains.enabled=true (step 3) and its controller
+# scheduled onto a system node. Launcher pinned to a NON-GPU node.
+apiVersion: resource.nvidia.com/v1beta1
+kind: ComputeDomain
+metadata: {name: nccl-cd, namespace: __NAMESPACE__}
+spec:
+  numNodes: 2
+  channel:
+    resourceClaimTemplate:
+      name: nccl-cd-channel
+---
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata: {name: nccl-mnnvl, namespace: __NAMESPACE__}
+spec:
+  slotsPerWorker: 1
+  runPolicy: {cleanPodPolicy: Running}
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          nodeSelector: {agentpool: system}
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            command: ["/bin/bash","-c"]
+            args:
+            - |
+              sleep 20
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                -x LD_LIBRARY_PATH -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NVLS,GRAPH \
+                -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=1 \
+                -x NCCL_NVLS_ENABLE=1 -x NCCL_MNNVL_ENABLE=1 \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          runtimeClassName: nvidia
+          tolerations:
+          - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+          - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-mnnvl, training.kubeflow.org/job-role: worker}}
+                topologyKey: kubernetes.io/hostname
+          automountServiceAccountToken: false
+          resourceClaims:
+          - {name: imex-channel, resourceClaimTemplateName: nccl-cd-channel}
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            securityContext: {privileged: true}
+            resources:
+              limits:
+                nvidia.com/gpu: "1"          # GPU via the device plugin
+              claims:
+              - {name: imex-channel}          # IMEX channel via DRA ComputeDomains

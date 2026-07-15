@@ -1,0 +1,64 @@
+# GPU Operator values — FULL managed stack for AKS GB300.
+#
+# Unlike the ../deviceplugin variant (driver-only + toolkit OFF), this enables the
+# whole operator stack: driver + container-toolkit + device plugin + DCGM + exporter.
+#
+# THE KEY AKS FIX  ->  toolkit.env RUNTIME_CONFIG_SOURCE=file
+#   AKS image 202606.19.0 ships containerd 2.3.2 whose root /etc/containerd/config.toml
+#   is version = 2. containerd 2.3 added strict validation: an imported drop-in's
+#   config version must be <= the root version. The toolkit's DEFAULT config source is
+#   `containerd config dump`, which on 2.3 reports version 4, so it writes a v4 drop-in
+#   (/etc/containerd/conf.d/99-nvidia.toml). A v4 drop-in on a v2 root is rejected:
+#     "containerd: drop-in config version 4 higher than root config version 2"
+#   -> containerd crash-loops -> every GPU node goes NotReady.
+#   RUNTIME_CONFIG_SOURCE=file makes the toolkit read the v2 root FILE instead, so it
+#   emits a v2 drop-in that passes validation. Validated on GB300: nodes stay Ready,
+#   drop-in is v2 (io.containerd.grpc.v1.cri), nvidia/nvidia-cdi/nvidia-legacy runtimes
+#   registered. (NRI is already enabled on AKS containerd 2.3.2, cdi enable_cdi=true.)
+#
+# Other GB specifics:
+#   driver.kernelModuleType=open  — Blackwell supports only the open modules.
+#   driver.rdma.enabled=false     — GDR works via the inbox dmabuf path (Data-Direct),
+#                                   not nvidia-peermem; avoids the "waiting for MOFED" hang.
+nfd:
+  enabled: true
+daemonsets:
+  tolerations:
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+  - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+driver:
+  enabled: true
+  kernelModuleType: "open"
+  rdma:
+    enabled: false
+toolkit:
+  enabled: true
+  env:
+  - name: RUNTIME_CONFIG_SOURCE
+    value: file                 # <-- REQUIRED on AKS containerd 2.3.x (v2 root)
+cdi:
+  enabled: true
+  nriPluginEnabled: true
+devicePlugin:
+  enabled: true
+dcgm:
+  enabled: true
+dcgmExporter:
+  enabled: true
+gfd:
+  enabled: true
+migManager:
+  enabled: false
+vgpuDeviceManager:
+  enabled: false
+vfioManager:
+  enabled: false
+sandboxDevicePlugin:
+  enabled: false
+node-feature-discovery:
+  worker:
+    tolerations:
+    - {key: "node-role.kubernetes.io/master", operator: "Equal", value: "", effect: "NoSchedule"}
+    - {key: "node-role.kubernetes.io/control-plane", operator: "Equal", value: "", effect: "NoSchedule"}
+    - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+    - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
