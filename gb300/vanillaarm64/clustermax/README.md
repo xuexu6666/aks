@@ -9,7 +9,7 @@ image (`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
 
 ```bash
 cd gb300/vanillaarm64/clustermax
-./setup.sh            # 00 cluster -> 01 pool -> 02 gpu-operator -> 03 dra -> 05 dranet -> 04 nccl(all)
+./setup.sh            # 00 cluster -> 01 pool -> 02 gpu-operator -> 03 dra -> 04 dranet -> 05 nccl(all)
 ```
 
 | Step | Does |
@@ -18,8 +18,8 @@ cd gb300/vanillaarm64/clustermax
 | `01-nodepool.sh` | GB300 pool (`Standard_ND128isr_GB300_v6`) on the vanilla arm64 custom image, `--gpu-driver None`, `sku=gpu` taint |
 | `02-gpu-operator.sh` | **Full stack**: driver (open R580) + **toolkit** + device plugin + DCGM + exporter |
 | `03-dra.sh` | DRA driver, **ComputeDomains only** (coexists with the device plugin) + controller patch |
-| `05-ib-dranet.sh` | **Official dranet** (`kubernetes-sigs/dranet` `v1.3.0`) — publishes GB300 IB VFs as `dra.net` ResourceSlices for **non-privileged** IB |
-| `04-nccl.sh` | NCCL `a` (intra-NVLink) / `ib-dra` (cross-node IB, dranet) / `ib` (privileged fallback) / `mnnvl` (cross-node NVLink) / `all` |
+| `04-ib-dranet.sh` | **Official dranet** (`kubernetes-sigs/dranet` `v1.3.0`) — publishes GB300 IB VFs as `dra.net` ResourceSlices for **non-privileged** IB |
+| `05-nccl.sh` | NCCL `a` (intra-NVLink) / `ib-dra` (cross-node IB, dranet) / `ib` (privileged fallback) / `mnnvl` (cross-node NVLink) / `all` |
 
 ## The one thing that makes the toolkit work on AKS
 

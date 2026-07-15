@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step 4 — run the NCCL tests on the full stack.
+# Step 5 — run the NCCL tests on the full stack.
 #   a      = Path A intra-node NVLink  (1 pod, 4 GPUs, device plugin)          ~620 GB/s
 #   ib-dra = Path B cross-node IB/RDMA — OFFICIAL dranet, NON-privileged (needs step 05) ~88 GB/s
 #   ib     = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (fallback)  ~88 GB/s
@@ -26,7 +26,7 @@ ensure_mpi_operator() {
 # dranet (step 05) must be up for the ib-dra path — bail early with guidance if not
 ensure_dranet_ready() {
   local n; n=$(kubectl get resourceslices --field-selector=spec.driver=dra.net --no-headers 2>/dev/null | grep -cve '^\s*$' || true)
-  [ "${n:-0}" -ge 1 ] || die "no dra.net ResourceSlices — run ./05-ib-dranet.sh first (installs official dranet)"
+  [ "${n:-0}" -ge 1 ] || die "no dra.net ResourceSlices — run ./04-ib-dranet.sh first (installs official dranet)"
   # claim template is namespaced; ensure it exists (idempotent)
   apply manifests/dranet-nic-claim.yaml
 }

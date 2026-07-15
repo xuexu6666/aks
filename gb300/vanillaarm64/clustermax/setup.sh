@@ -11,6 +11,6 @@ log "clustermax GB300 full-stack setup starting"
 ./01-nodepool.sh
 ./02-gpu-operator.sh          # driver + toolkit(RUNTIME_CONFIG_SOURCE=file) + device-plugin + DCGM + exporter
 ./03-dra.sh                   # DRA driver — ComputeDomains only (coexists with device plugin)
-./05-ib-dranet.sh             # OFFICIAL dranet — non-privileged IB via DRA (dra.net ResourceSlices)
-./04-nccl.sh "${1:-all}"      # a | ib-dra | ib | mnnvl | all
+./04-ib-dranet.sh             # OFFICIAL dranet — non-privileged IB via DRA (dra.net ResourceSlices)
+./05-nccl.sh "${1:-all}"      # a | ib-dra | ib | mnnvl | all
 ok "clustermax setup complete."

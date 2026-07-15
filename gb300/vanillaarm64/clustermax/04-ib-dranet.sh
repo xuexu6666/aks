@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step 5 (optional, CX-usable IB) — OFFICIAL dranet for non-privileged IB via DRA.
+# Step 4 (optional, CX-usable IB) — OFFICIAL dranet for non-privileged IB via DRA.
 #
 # Installs kubernetes-sigs/dranet (the upstream Kubernetes-SIG project, pinned at
 # ${DRANET_VERSION}) so GB300 IB VFs are published as `dra.net` ResourceSlices and
@@ -61,4 +61,4 @@ done
 rdma=$(kubectl get resourceslices --field-selector=spec.driver=dra.net -o json 2>/dev/null \
   | grep -c 'dra.net/rdmaDevice' || true)
 ok "Official dranet up. dra.net ResourceSlices published (RDMA/IB VF devices: ${rdma:-?})."
-ok "Run the non-privileged IB test:  ./04-nccl.sh ib-dra"
+ok "Run the non-privileged IB test:  ./05-nccl.sh ib-dra"
