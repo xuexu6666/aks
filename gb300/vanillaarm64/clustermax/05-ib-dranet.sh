@@ -27,14 +27,21 @@ fi
 log "Installing OFFICIAL dranet ${DRANET_VERSION} (kubernetes-sigs/dranet)"
 kubectl apply -f "${INSTALL_URL}"
 
-# install.yaml ships the image as ':stable' and no nodeSelector (runs everywhere).
-# Pin the image to the release tag for reproducibility, and confine the DaemonSet
-# to our GB300 pool (it only needs to publish RDMA NICs where the GPUs are).
-log "Pinning image to ${DRANET_VERSION} and targeting pool '${NODEPOOL}'"
+# install.yaml ships the image as ':stable', no nodeSelector, and the default args
+# (--v=4 --hostname-override). We (1) pin the image to the release tag, (2) confine
+# the DaemonSet to our GB300 pool, and (3) add --move-ib-interfaces=false — the
+# upstream GB300 example (examples/azure_aks_examples/gb300) requires this for
+# IB-mode ConnectX VFs so dranet publishes rdmaDevice attributes instead of trying
+# to move (non-existent) IPoIB netdevs into the pod netns.
+log "Pinning image to ${DRANET_VERSION}, targeting pool '${NODEPOOL}', IB-only mode"
 kubectl -n kube-system set image ds/dranet dranet="registry.k8s.io/networking/dranet:${DRANET_VERSION}"
 kubectl -n kube-system patch ds dranet --type=json \
   -p="[{\"op\":\"add\",\"path\":\"/spec/template/spec/nodeSelector\",\"value\":{\"agentpool\":\"${NODEPOOL}\"}}]" \
   2>/dev/null || warn "nodeSelector patch skipped (already set)"
+# replace the whole args array (idempotent) to guarantee --move-ib-interfaces=false
+kubectl -n kube-system patch ds dranet --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":["/dranet","--v=4","--hostname-override=$(NODE_NAME)","--move-ib-interfaces=false"]}]' \
+  2>/dev/null || warn "args patch skipped"
 kubectl -n kube-system rollout status ds/dranet --timeout=180s 2>/dev/null || \
   warn "dranet DaemonSet not fully rolled out yet — check 'kubectl -n kube-system get pods -l app=dranet'"
 
