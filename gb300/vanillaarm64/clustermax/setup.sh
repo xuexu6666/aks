@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One-shot: cluster -> GB300 pool -> full GPU Operator (toolkit+device-plugin+DCGM+
-# exporter) -> DRA ComputeDomains -> NCCL. Each step is idempotent and can be run
-# on its own. Override anything via env (see variables.sh), e.g. NODE_COUNT=4 ./setup.sh
+# exporter) -> DRA ComputeDomains -> official dranet (IB) -> NCCL. Each step is
+# idempotent and can be run on its own. Override anything via env (see variables.sh),
+# e.g. NODE_COUNT=4 ./setup.sh
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
 
@@ -10,5 +11,6 @@ log "clustermax GB300 full-stack setup starting"
 ./01-nodepool.sh
 ./02-gpu-operator.sh          # driver + toolkit(RUNTIME_CONFIG_SOURCE=file) + device-plugin + DCGM + exporter
 ./03-dra.sh                   # DRA driver — ComputeDomains only (coexists with device plugin)
-./04-nccl.sh "${1:-all}"      # a | ib | mnnvl | all
+./05-ib-dranet.sh             # OFFICIAL dranet — non-privileged IB via DRA (dra.net ResourceSlices)
+./04-nccl.sh "${1:-all}"      # a | ib-dra | ib | mnnvl | all
 ok "clustermax setup complete."

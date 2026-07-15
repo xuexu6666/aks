@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Step 4 — run the NCCL tests on the full stack.
-#   a  = Path A  intra-node NVLink   (1 pod, 4 GPUs, device plugin)         ~620 GB/s
-#   ib = Path B  cross-node IB/RDMA  (2 nodes x1 GPU, device plugin + /dev/infiniband) ~88 GB/s
-#   mnnvl = Path C cross-node NVLink (2 nodes x1 GPU, device plugin + DRA ComputeDomains) ~595 GB/s
-#   all = a, then ib, then mnnvl
+#   a      = Path A intra-node NVLink  (1 pod, 4 GPUs, device plugin)          ~620 GB/s
+#   ib-dra = Path B cross-node IB/RDMA — OFFICIAL dranet, NON-privileged (needs step 05) ~88 GB/s
+#   ib     = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (fallback)  ~88 GB/s
+#   mnnvl  = Path C cross-node NVLink  (2 nodes x1 GPU, device plugin + DRA ComputeDomains) ~595 GB/s
+#   all    = a, then ib-dra (the CX-usable IB path), then mnnvl
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
 
@@ -20,6 +21,14 @@ ensure_mpi_operator() {
   kubectl patch deploy -n mpi-operator mpi-operator --type=json \
     -p='[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"key":"sku","value":"gpu","operator":"Equal","effect":"NoSchedule"}]}]' 2>/dev/null || true
   kubectl wait --for=condition=available deployment/mpi-operator -n mpi-operator --timeout=300s || true
+}
+
+# dranet (step 05) must be up for the ib-dra path — bail early with guidance if not
+ensure_dranet_ready() {
+  local n; n=$(kubectl get resourceslices --field-selector=spec.driver=dra.net --no-headers 2>/dev/null | grep -cve '^\s*$' || true)
+  [ "${n:-0}" -ge 1 ] || die "no dra.net ResourceSlices — run ./05-ib-dranet.sh first (installs official dranet)"
+  # claim template is namespaced; ensure it exists (idempotent)
+  apply manifests/dranet-nic-claim.yaml
 }
 
 # the MPI launcher must run on a NON-GPU node (a Ready 'system' pool node)
@@ -53,12 +62,13 @@ run_job() {  # $1=jobname $2=manifest  (MPIJob)
 
 case "${WHICH}" in
   a)      run_pod nccl-nvlink manifests/nccl-nvlink.yaml ;;
-  ib)     ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib    manifests/nccl-ib.yaml ;;
-  mnnvl)  ensure_mpi_operator; ensure_launcher_home; run_job nccl-mnnvl manifests/nccl-mnnvl.yaml ;;
+  ib-dra) ensure_dranet_ready; ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib-dra manifests/nccl-ib-dra.yaml ;;
+  ib)     ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib     manifests/nccl-ib.yaml ;;
+  mnnvl)  ensure_mpi_operator; ensure_launcher_home; run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   all)    run_pod nccl-nvlink manifests/nccl-nvlink.yaml
           ensure_mpi_operator; ensure_launcher_home
-          run_job nccl-ib    manifests/nccl-ib.yaml
-          run_job nccl-mnnvl manifests/nccl-mnnvl.yaml ;;
-  *) die "usage: $0 [a|ib|mnnvl|all]" ;;
+          ensure_dranet_ready; run_job nccl-ib-dra manifests/nccl-ib-dra.yaml
+          run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
+  *) die "usage: $0 [a|ib-dra|ib|mnnvl|all]" ;;
 esac
 ok "NCCL run(s) complete. Expected: A ~620, IB ~88, MNNVL ~595 GB/s."

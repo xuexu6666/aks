@@ -10,6 +10,8 @@ if [ "${KEEP_RG:-0}" = "1" ]; then
   az aks get-credentials -g "${RESOURCE_GROUP}" -n "${CLUSTER_NAME}" --admin --overwrite-existing 2>/dev/null || true
   helm uninstall nvidia-dra-driver-gpu -n "${NAMESPACE}" 2>/dev/null || true
   helm uninstall gpu-operator -n "${NAMESPACE}" 2>/dev/null || true
+  kubectl delete -f "https://raw.githubusercontent.com/kubernetes-sigs/dranet/${DRANET_VERSION:-v1.3.0}/install.yaml" 2>/dev/null || true
+  kubectl delete deviceclass dranet.net 2>/dev/null || true
   kubectl delete -k "https://github.com/kubeflow/mpi-operator/manifests/overlays/standalone?ref=v0.7.0" 2>/dev/null || true
   ok "charts removed (cluster + pool kept)"
 else

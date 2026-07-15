@@ -1,0 +1,73 @@
+# Path B (DRA) — cross-node IB / RDMA via OFFICIAL dranet, NON-privileged.
+#
+# This is the CX-usable IB path. Unlike nccl-ib.yaml (privileged + hostPath
+# /dev/infiniband), the worker here is NOT privileged and mounts nothing by hand:
+#   - GPU  comes from the DEVICE PLUGIN  (runtimeClassName nvidia + nvidia.com/gpu)
+#   - IB NIC comes from OFFICIAL dranet via a DRA claim (ib-nic). dranet injects
+#     the VF's /dev/infiniband char devices into the pod netns/CDI.
+# The only elevated bit is the IPC_LOCK capability, which RDMA needs to pin/register
+# memory regions — a namespaced capability, not full privilege. A CX can copy this
+# manifest as-is; no host mounts, no privileged.
+#
+# Launcher MUST run on a NON-GPU (system) node: dranet's NRI hook on the GB nodes
+# disturbs OpenMPI's OOB callback, so a launcher co-located on a GB node fails
+# ("ORTE ... no route"). Workers stay on GB nodes. (Same constraint as ../dra.)
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata: {name: nccl-ib-dra, namespace: __NAMESPACE__}
+spec:
+  slotsPerWorker: 1
+  runPolicy: {cleanPodPolicy: Running}
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          nodeSelector: {agentpool: system}   # launcher off the GB nodes (see note)
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            command: ["/bin/bash","-c"]
+            args:
+            - |
+              sleep 20
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                -x LD_LIBRARY_PATH -x PATH \
+                -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NET \
+                -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=0 -x NCCL_IB_HCA=mlx5 \
+                -x NCCL_SHM_DISABLE=1 -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 \
+                -x NCCL_NET_GDR_LEVEL=SYS \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          runtimeClassName: nvidia
+          tolerations:
+          - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+          - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-ib-dra, training.kubeflow.org/job-role: worker}}
+                topologyKey: kubernetes.io/hostname
+          automountServiceAccountToken: false
+          resourceClaims:
+          - {name: ib-nic, resourceClaimTemplateName: ib-nic}
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            securityContext:
+              capabilities: {add: ["IPC_LOCK"]}   # RDMA mem-registration; NOT privileged
+              # NOTE: IPC_LOCK *permits* locking but does NOT raise the memlock rlimit.
+              # AKS nodes default to `max locked memory = 8192 KB`, which caps RDMA
+              # buffer registration and throttles NCCL hard (measured ~0.43 GB/s).
+              # Full bandwidth needs the node's containerd to expose unlimited memlock
+              # (LimitMEMLOCK=infinity) so this pod inherits `ulimit -l unlimited`.
+              # See README "Non-privileged IB" — this node-level requirement is the
+              # one asterisk on the otherwise copy-paste-able CX manifest.
+            resources:
+              limits:
+                nvidia.com/gpu: "1"                # GPU via the device plugin
+              claims:
+              - {name: ib-nic}                     # IB NIC via official dranet (DRA)

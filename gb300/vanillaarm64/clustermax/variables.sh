@@ -30,6 +30,8 @@ export OS_IMAGE_VERSION="${OS_IMAGE_VERSION:-202606.19.0}"
 export NAMESPACE="${NAMESPACE:-nvidia}"
 export GPU_OPERATOR_VERSION="${GPU_OPERATOR_VERSION:-v25.10.1}"
 export DRA_DRIVER_VERSION="${DRA_DRIVER_VERSION:-25.12.0}"
+# Official dranet (kubernetes-sigs/dranet) for non-privileged IB via DRA — step 05.
+export DRANET_VERSION="${DRANET_VERSION:-v1.3.0}"
 # Driver rootfs mounted on the host by the operator driver DaemonSet.
 export DRIVER_ROOT="${DRIVER_ROOT:-/run/nvidia/driver}"
 export DRIVER_LIB="${DRIVER_LIB:-${DRIVER_ROOT}/usr/lib/aarch64-linux-gnu}"
