@@ -3,7 +3,7 @@
 # Override any value via the environment, e.g.  NODE_COUNT=4 ./setup.sh
 
 # --- Azure / cluster ---------------------------------------------------------
-export SUBSCRIPTION="${SUBSCRIPTION:-bb962ef9-0e20-4a2f-940d-3e517c944b81}"
+export SUBSCRIPTION="${SUBSCRIPTION:-<your-subscription-id>}"
 export RESOURCE_GROUP="${RESOURCE_GROUP:-gb300-test-rg}"
 export CLUSTER_NAME="${CLUSTER_NAME:-gb300}"
 export REGION="${REGION:-eastus2}"
@@ -20,7 +20,7 @@ export K8S_VERSION="${K8S_VERSION:-1.35.5}"
 export GPU_TAINT="${GPU_TAINT:-sku=gpu:NoSchedule}"
 
 # --- Vanilla arm64 image (delivered via UseCustomizedOSImage) ----------------
-export OS_IMAGE_SUB="${OS_IMAGE_SUB:-109a5e88-712a-48ae-9078-9ca8b3c81345}"
+export OS_IMAGE_SUB="${OS_IMAGE_SUB:-<aks-image-gallery-subscription-id>}"
 export OS_IMAGE_RG="${OS_IMAGE_RG:-AKS-Ubuntu}"
 export OS_IMAGE_GALLERY="${OS_IMAGE_GALLERY:-AKSUbuntu}"
 export OS_IMAGE_NAME="${OS_IMAGE_NAME:-2404gen2arm64containerd}"
