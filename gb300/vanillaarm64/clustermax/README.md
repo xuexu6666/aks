@@ -97,11 +97,14 @@ all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RD
 | `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (NVLS) | `privileged` | ❌ — see below |
 
 **MNNVL still needs `privileged`.** ComputeDomains *does* inject the IMEX channel
-(`/dev/nvidia-caps-imex-channels/channel0`) into a non-priv pod, but NCCL's **NVLS
-multicast** setup then crashes with `IPC_LOCK` alone *and* with `IPC_LOCK+SYS_ADMIN`;
-`privileged` runs at **~593 GB/s**. So the CX-usable non-privileged story covers
-**IB and intra-node NVLink**; cross-node NVLink (MNNVL) remains privileged until we
-identify the multicast/fabric device access it needs (future work).
+(`/dev/nvidia-caps-imex-channels/channel0`) into a non-priv pod, but the collective
+crashes non-privileged in **every** combo tested: `IPC_LOCK` alone, `IPC_LOCK+SYS_ADMIN`,
+and even `IPC_LOCK` with **`NCCL_NVLS_ENABLE=0`** (signal 6). So it's **not just the
+NVLS multicast optimization** — the base MNNVL fabric-memory path (CUDA `cuMem` FABRIC
+handles) also needs access only `privileged` grants. `privileged` runs at **~593 GB/s**.
+So the CX-usable non-privileged story covers **IB and intra-node NVLink**; cross-node
+NVLink (MNNVL) remains privileged (future work). NB: Anson's upstream example sidesteps
+this entirely — it runs **IB-only** with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.
 
 ## Notes / AKS specifics
 

@@ -10,10 +10,14 @@
 #
 # PRIVILEGE: unlike ib-dra (non-privileged), this worker needs `privileged: true`.
 # Tested on GB300: ComputeDomains DOES inject the IMEX channel
-# (/dev/nvidia-caps-imex-channels/channel0) into a non-priv pod, but NCCL's NVLS
-# multicast setup then crashes with IPC_LOCK alone AND with IPC_LOCK+SYS_ADMIN.
-# privileged works (~593 GB/s). Making MNNVL non-privileged is future work (needs
-# the multicast/fabric device access that privileged still provides).
+# (/dev/nvidia-caps-imex-channels/channel0) into a non-priv pod, but the collective
+# then crashes non-privileged in every combo tried:
+#   - IPC_LOCK only .................. crash (NVLS multicast setup)
+#   - IPC_LOCK + SYS_ADMIN ........... crash
+#   - IPC_LOCK + NCCL_NVLS_ENABLE=0 .. crash (signal 6) — so it's NOT just the NVLS
+#       multicast optimization; the BASE MNNVL fabric-memory path (cuMem FABRIC
+#       handles) also needs access only `privileged` grants.
+# privileged works (~593 GB/s). Non-privileged MNNVL is future work.
 apiVersion: resource.nvidia.com/v1beta1
 kind: ComputeDomain
 metadata: {name: nccl-cd, namespace: __NAMESPACE__}
