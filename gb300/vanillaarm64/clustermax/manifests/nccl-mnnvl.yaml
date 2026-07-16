@@ -8,16 +8,15 @@
 # Requires: DRA driver with computeDomains.enabled=true (step 3) and its controller
 # scheduled onto a system node. Launcher pinned to a NON-GPU node.
 #
-# PRIVILEGE: unlike ib-dra (non-privileged), this worker needs `privileged: true`.
-# Tested on GB300: ComputeDomains DOES inject the IMEX channel
-# (/dev/nvidia-caps-imex-channels/channel0) into a non-priv pod, but the collective
-# then crashes non-privileged in every combo tried:
-#   - IPC_LOCK only .................. crash (NVLS multicast setup)
-#   - IPC_LOCK + SYS_ADMIN ........... crash
-#   - IPC_LOCK + NCCL_NVLS_ENABLE=0 .. crash (signal 6) — so it's NOT just the NVLS
-#       multicast optimization; the BASE MNNVL fabric-memory path (cuMem FABRIC
-#       handles) also needs access only `privileged` grants.
-# privileged works (~593 GB/s). Non-privileged MNNVL is future work.
+# PRIVILEGE: privileged here is a WORKAROUND, not the intended design. NVIDIA's
+# ComputeDomains goal is non-privileged MNNVL (IPC_LOCK + DRA-injected IMEX channel);
+# verified GB200 examples run it that way. On GB300 the IMEX channel DID get injected
+# (/dev/nvidia-caps-imex-channels/channel0) non-privileged, but the collective still
+# crashed with IPC_LOCK, IPC_LOCK+SYS_ADMIN, and NCCL_NVLS_ENABLE=0. privileged works
+# (~593 GB/s). This matches OPEN bug NVIDIA/nccl#1925 (Cuda failure 800 'operation not
+# permitted' on the IMEX path; privileged is the reporter's workaround too).
+# Not yet tried: seccomp/AppArmor Unconfined + SYS_ADMIN/SYS_RESOURCE/SYS_NICE (what
+# the #1925 reporter used), or a fully-configured IMEX domain / newer DRA driver.
 apiVersion: resource.nvidia.com/v1beta1
 kind: ComputeDomain
 metadata: {name: nccl-cd, namespace: __NAMESPACE__}

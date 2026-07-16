@@ -96,15 +96,24 @@ all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RD
 | `ib` (`nccl-ib.yaml`) | cross-node IB (host-mount) | `privileged` | ❌ (fallback) |
 | `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (NVLS) | `privileged` | ❌ — see below |
 
-**MNNVL still needs `privileged`.** ComputeDomains *does* inject the IMEX channel
-(`/dev/nvidia-caps-imex-channels/channel0`) into a non-priv pod, but the collective
-crashes non-privileged in **every** combo tested: `IPC_LOCK` alone, `IPC_LOCK+SYS_ADMIN`,
-and even `IPC_LOCK` with **`NCCL_NVLS_ENABLE=0`** (signal 6). So it's **not just the
-NVLS multicast optimization** — the base MNNVL fabric-memory path (CUDA `cuMem` FABRIC
-handles) also needs access only `privileged` grants. `privileged` runs at **~593 GB/s**.
-So the CX-usable non-privileged story covers **IB and intra-node NVLink**; cross-node
-NVLink (MNNVL) remains privileged (future work). NB: Anson's upstream example sidesteps
-this entirely — it runs **IB-only** with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.
+**MNNVL: privileged is a current workaround, NOT the intended design.** NVIDIA's
+ComputeDomains design goal is explicitly to run MNNVL **non-privileged** (`IPC_LOCK` +
+the DRA-injected IMEX channel), and verified GB200 NVL72 examples (Crusoe/CoreWeave) do
+exactly that. On our GB300 the non-privileged pod got the IMEX channel injected
+(`/dev/nvidia-caps-imex-channels/channel0`) but the collective still crashed with
+`IPC_LOCK`, `IPC_LOCK+SYS_ADMIN`, and even `NCCL_NVLS_ENABLE=0`; `privileged` runs at
+**~593 GB/s**. This **matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)**
+(Nov 2025): `Cuda failure 800 'operation not permitted'` on the IMEX-channel path,
+where the reporter likewise found `privileged: true` is the current workaround —
+unresolved upstream. So MNNVL-privileged here is a **known bug/config gap**, not a
+fundamental requirement.
+
+*Not yet exhausted (future work):* the #1925 reporter also tried `SYS_ADMIN +
+SYS_RESOURCE + IPC_LOCK + SYS_NICE` **with seccomp/AppArmor set Unconfined** — we only
+tried `IPC_LOCK` and `+SYS_ADMIN` *without* relaxing seccomp/AppArmor (which `privileged`
+does). A fully-configured IMEX domain / newer DRA driver / that seccomp-unconfined combo
+may unlock non-priv MNNVL. (Anson sidesteps it entirely — his upstream runs **IB-only**
+with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.)
 
 ## Notes / AKS specifics
 
