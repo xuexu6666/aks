@@ -1,12 +1,12 @@
-# GB300 on vanilla arm64 — clustermax full-stack (toolkit + GPU-DRA + DCGM + dranet, NUMA-aligned IB)
+# GB300 on vanilla arm64 — clustermax full-stack (toolkit + GPU-DRA + DCGM + dranet)
 
 The **full-stack** variant. Installs driver (open R580) + **container-toolkit** + **DCGM** +
 **dcgm-exporter** from the GPU Operator (**device plugin OFF**), the **NVIDIA GPU DRA driver**
 (GPUs as `gpu.nvidia.com` ResourceSlices + ComputeDomains for MNNVL), and **official dranet**
 (IB NICs as `dra.net` ResourceSlices). GPUs come from **DRA, not the device plugin**, so a
-workload claims a GPU and its **NUMA-aligned** IB NIC in one DRA request — which is what unlocks
-GPUDirect RDMA and full-bandwidth **non-privileged** IB (~56 GB/s/NIC vs ~25 GB/s cross-NUMA).
-Same vanilla arm64 image (`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
+workload claims a GPU and its aligned IB NIC in one DRA request → **~56 GB/s/NIC** non-privileged
+IB (vs ~25 GB/s when the GPU and NIC land apart). Same vanilla arm64 image
+(`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
 
 ```bash
 cd gb300/vanillaarm64/clustermax
@@ -27,13 +27,12 @@ cd gb300/vanillaarm64/clustermax
 | Mode | Path | securityContext | Bandwidth |
 |---|---|---|---|
 | `a` | intra-node NVLink (4 GPUs via DRA) | none | **~650 GB/s** |
-| `ib-dra` | cross-node IB — dranet, **NUMA-aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
+| `ib-dra` | cross-node IB — dranet, **aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
 | `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
 | `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~593 GB/s** |
 
-`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Because GPU **and** NIC are
-claimed in one DRA request, they land on the **same NUMA node** → GPUDirect RDMA → **~56 GB/s/NIC**
-(a *cross-NUMA* pairing drops to ~25 GB/s — the difference is entirely NUMA alignment; see below).
+`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Claiming the GPU **and** NIC
+in one DRA request keeps them together (GDR) → **~56 GB/s/NIC**; picking them apart drops to ~25 GB/s.
 A 2-NIC aligned claim ≈ ~112 GB/s. `NCCL_IB_DATA_DIRECT=0` is set to keep it healthy.
 See "Privilege posture" for the MNNVL privileged caveat.
 
@@ -57,18 +56,15 @@ emits a **v2** drop-in that passes. Validated on GB300: nodes stay `Ready`, drop
 v2 (`io.containerd.grpc.v1.cri`), `nvidia`/`nvidia-cdi`/`nvidia-legacy` runtimes
 registered. `02-gpu-operator.sh` hard-fails if any node flips `NotReady` after the toolkit.
 
-## Why GPUs go through DRA (not the device plugin) — NUMA-aligned IB
+## Why GPUs go through DRA (not the device plugin)
 
-- **The device plugin is OFF; the NVIDIA GPU DRA driver owns GPUs** (`resources.gpus.enabled=true`
-  + `gpuResourcesEnabledOverride=true`, `values-dra.yaml`). They can't both allocate GPUs, so it's
-  one or the other.
-- **Why DRA:** with the device plugin, the GPU (`nvidia.com/gpu`) and the dranet IB NIC are resolved
-  *independently*, so the NIC almost always lands on the **other NUMA node** → GPUDirect RDMA can't be
-  used → **~25 GB/s**. With DRA you claim the **GPU and its aligned NIC in one request**
-  (`gpu-nic-aligned`: `gpu-0` @ NUMA0 + `mlx5_0` @ NUMA0), so the scheduler co-locates them → GDR → **~56 GB/s**.
-  This mirrors the upstream GB300 example's aligned/unaligned split (~56 vs ~25 GB/s).
-- **GB300 topology** (fixed): `gpu-0/1` + `mlx5_0/1` on NUMA 0; `gpu-2/3` + `mlx5_2/3` on NUMA 1.
-  Claim templates in `manifests/dra-claims.yaml` (`gpus-4`, `gpu-nic-aligned`, `gpu-1`).
+- **Device plugin OFF; the GPU DRA driver owns GPUs** (`resources.gpus.enabled=true` +
+  `gpuResourcesEnabledOverride=true`, `values-dra.yaml`) — they can't both allocate GPUs.
+- **Why:** DRA lets you claim the **GPU and its IB NIC in one request** (`gpu-nic-aligned`:
+  `gpu-0` + `mlx5_0`), so they land together → GDR → **~56 GB/s/NIC**. The device plugin resolves
+  GPU and NIC independently → they land apart → **~25 GB/s** (same split as the upstream GB300 example).
+- GB300 topology (fixed): `gpu-0/1`+`mlx5_0/1` together, `gpu-2/3`+`mlx5_2/3` together. Claim
+  templates in `manifests/dra-claims.yaml` (`gpus-4`, `gpu-nic-aligned`, `gpu-1`).
 - **MNNVL** workers claim a GPU (`gpu-1`, DRA) **plus** the `nccl-cd-channel` DRA claim (ComputeDomains IMEX).
 
 ## Non-privileged IB via official dranet (step 05)

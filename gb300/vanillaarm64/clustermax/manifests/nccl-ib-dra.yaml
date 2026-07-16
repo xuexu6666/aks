@@ -2,12 +2,8 @@
 #
 # This is the CX-usable IB path. Unlike nccl-ib.yaml (privileged + hostPath
 # /dev/infiniband), the worker here is NOT privileged and mounts nothing by hand.
-# GPU **and** its NUMA-aligned IB NIC come from ONE DRA claim (gpu-nic-aligned):
-#   - GPU     from the NVIDIA GPU DRA driver (gpu.nvidia.com), gpu-0 @ NUMA0
-#   - IB NIC  from OFFICIAL dranet (dra.net), mlx5_0 @ NUMA0 — same NUMA as the GPU
-# Claiming them together lets the scheduler co-locate them on one NUMA node, so NCCL
-# gets GPUDirect RDMA and full bandwidth (~56 GB/s/NIC) instead of the ~25 GB/s that
-# a cross-NUMA (unaligned) GPU↔NIC pairing yields. dranet injects the VF's
+# GPU + its IB NIC come from ONE DRA claim (gpu-nic-aligned: gpu-0 + mlx5_0), so they
+# land together → GDR → ~56 GB/s/NIC (vs ~25 GB/s picked apart). dranet injects the VF's
 # /dev/infiniband char devices into the pod. The only elevated bit is IPC_LOCK
 # (RDMA memory registration) — a namespaced capability, not full privilege. Copy as-is.
 #

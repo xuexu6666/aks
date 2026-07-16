@@ -1,12 +1,9 @@
 # GPU + IB-NIC DRA claim templates (device plugin OFF — DRA owns GPUs).
 #
-# GB300 topology is fixed and known: gpu-0/gpu-1 + mlx5_0/mlx5_1 sit on NUMA 0,
-# gpu-2/gpu-3 + mlx5_2/mlx5_3 on NUMA 1. "aligned" = GPU and NIC on the SAME NUMA
-# node, which is what lets NCCL use GPUDirect RDMA (NODE distance) and hit full IB
-# bandwidth (~56 GB/s/NIC) instead of the cross-NUMA (SYS) ~25 GB/s. Because both the
-# GPU (gpu.nvidia.com) and the NIC (dra.net) are claimed in ONE request, the scheduler
-# places them together. Selectors follow the upstream GB300 example
-# (kubernetes-sigs/dranet examples/azure_aks_examples/gb300).
+# Claiming the GPU (gpu.nvidia.com) and its IB NIC (dra.net) in ONE request keeps them
+# together → GDR → ~56 GB/s/NIC (vs ~25 GB/s when they land apart). "aligned" pairs on
+# GB300: gpu-0+mlx5_0 / gpu-1+mlx5_1 / gpu-2+mlx5_2 / gpu-3+mlx5_3. Selectors follow the
+# upstream GB300 example (kubernetes-sigs/dranet examples/azure_aks_examples/gb300).
 ---
 # Path A (intra-node NVLink): 4 GPUs, no NIC.
 apiVersion: resource.k8s.io/v1
