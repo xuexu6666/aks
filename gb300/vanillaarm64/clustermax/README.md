@@ -94,25 +94,33 @@ all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RD
 | `a` (`nccl-nvlink.yaml`) | intra-node NVLink | none | ✅ |
 | `ib-dra` (`nccl-ib-dra.yaml`) | cross-node IB (dranet) | `IPC_LOCK` | ✅ ~25 GB/s |
 | `ib` (`nccl-ib.yaml`) | cross-node IB (host-mount) | `privileged` | ❌ (fallback) |
-| `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (NVLS) | `privileged` | ❌ — see below |
+| `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (MNNVL/CUMEM fabric; NVLS on top) | `privileged` | ❌ — see below |
 
-**MNNVL: privileged is a current workaround, NOT the intended design.** NVIDIA's
-ComputeDomains design goal is explicitly to run MNNVL **non-privileged** (`IPC_LOCK` +
-the DRA-injected IMEX channel), and verified GB200 NVL72 examples (Crusoe/CoreWeave) do
-exactly that. On our GB300 the non-privileged pod got the IMEX channel injected
+**MNNVL: privileged is what works today; non-privileged is NVIDIA's *intent* but not
+a confirmed reality.** NVIDIA's ComputeDomains design goal is to run MNNVL
+**non-privileged** (the DRA driver injects the IMEX channel and treats it as an
+implementation detail), and CoreWeave's GB200 docs show an MNNVL worker with
+`privileged: false`. Note: that CoreWeave example uses **no added capabilities at all** —
+`IPC_LOCK` is an **IB/RDMA** memory-pinning requirement (from the `ib-dra` path), not a
+documented IMEX/NVLink one; don't assume it's the MNNVL unlock. Caveat: I found **no
+bandwidth-verified non-privileged MNNVL run** published anywhere — the non-priv posture
+is documented *intent*, not a confirmed passing result.
+
+On our GB300 the non-privileged pod got the IMEX channel injected
 (`/dev/nvidia-caps-imex-channels/channel0`) but the collective still crashed with
 `IPC_LOCK`, `IPC_LOCK+SYS_ADMIN`, and even `NCCL_NVLS_ENABLE=0`; `privileged` runs at
-**~593 GB/s**. This **matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)**
-(Nov 2025): `Cuda failure 800 'operation not permitted'` on the IMEX-channel path,
-where the reporter likewise found `privileged: true` is the current workaround —
-unresolved upstream. So MNNVL-privileged here is a **known bug/config gap**, not a
-fundamental requirement.
+**~593 GB/s**. This matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)
+(Nov 2025): `Cuda failure 800 'operation not permitted'` on the IMEX-channel path, where
+`privileged: true` is the reporter's confirmed workaround — unresolved upstream. (That
+report is on **GB200**; our crash is **GB300** — a reasonable cross-platform match, but
+an inference.) So privileged looks like a **bug/config gap** rather than an inherent
+requirement — but no non-privileged fix is confirmed anywhere yet.
 
-*Not yet exhausted (future work):* the #1925 reporter also tried `SYS_ADMIN +
-SYS_RESOURCE + IPC_LOCK + SYS_NICE` **with seccomp/AppArmor set Unconfined** — we only
-tried `IPC_LOCK` and `+SYS_ADMIN` *without* relaxing seccomp/AppArmor (which `privileged`
-does). A fully-configured IMEX domain / newer DRA driver / that seccomp-unconfined combo
-may unlock non-priv MNNVL. (Anson sidesteps it entirely — his upstream runs **IB-only**
+*Known NOT to work (per #1925):* `SYS_ADMIN + SYS_RESOURCE + IPC_LOCK + SYS_NICE` with
+**seccomp/AppArmor `Unconfined`** + `allowPrivilegeEscalation` — the reporter tried that
+exact combo and it **still failed**. So capability/seccomp tweaks are a dead end. The
+only genuinely untried avenues are a **fully-configured IMEX domain** or a **newer
+NVIDIA DRA driver**. (Anson sidesteps MNNVL entirely — his upstream runs **IB-only**
 with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.)
 
 ## Notes / AKS specifics
