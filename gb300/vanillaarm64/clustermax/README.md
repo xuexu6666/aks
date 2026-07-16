@@ -1,4 +1,4 @@
-# GB300 on vanilla arm64 — clustermax full-stack (toolkit + device plugin + DCGM + DRA)
+# GB300 on vanilla arm64 — clustermax full-stack (toolkit + device plugin + DCGM + DRA + dranet)
 
 The **managed-experience** variant. Where `../deviceplugin` runs the toolkit OFF (and
 mounts the driver by hand) and `../dra` uses pure DRA, this one installs the **whole
@@ -20,6 +20,19 @@ cd gb300/vanillaarm64/clustermax
 | `03-dra.sh` | DRA driver, **ComputeDomains only** (coexists with the device plugin) + controller patch |
 | `04-ib-dranet.sh` | **Official dranet** (`kubernetes-sigs/dranet` `v1.3.0`) — publishes GB300 IB VFs as `dra.net` ResourceSlices for **non-privileged** IB |
 | `05-nccl.sh` | NCCL `a` (intra-NVLink) / `ib-dra` (cross-node IB, dranet) / `ib` (privileged fallback) / `mnnvl` (cross-node NVLink) / `all` |
+
+## NCCL results (validated on GB300)
+
+| Mode | Path | securityContext | Bandwidth |
+|---|---|---|---|
+| `a` | intra-node NVLink (4 GPUs, device plugin) | none | **~650 GB/s** |
+| `ib-dra` | cross-node IB — **dranet, 1 NIC** | **`IPC_LOCK`** (non-priv) | **~25 GB/s** |
+| `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
+| `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~593 GB/s** |
+
+`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Node `LimitMEMLOCK=infinity`
+lifts it ~25 → 28 GB/s (~11%, a nice-to-have); a 4-NIC claim ≈ `ib`. Set `NCCL_IB_DATA_DIRECT=0`.
+See "Privilege posture" below for the MNNVL privileged caveat.
 
 ## The one thing that makes the toolkit work on AKS
 
@@ -137,9 +150,5 @@ with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.)
   disturbs the OpenMPI OOB callback.
 - **k8s must be a baked version** (`1.35.5` for `202606.19.0`) so the node skips
   `apt-get update` at bootstrap.
-
-## Expected NCCL results
-`a` intra-NVLink **~620 GB/s** · `ib` (privileged, 4-NIC) cross-node IB **~88 GB/s** · `mnnvl` cross-node NVLink **~595 GB/s**
-`ib-dra` (non-privileged, official dranet, **1-NIC**): **~25 GB/s** (`IPC_LOCK` only, stock node) → **~28 GB/s** with node memlock unlimited. 4-NIC claim ≈ `ib` — TODO.
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
