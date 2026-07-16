@@ -4,13 +4,17 @@
 # the DRA driver purely for ComputeDomains — the DRA-automated IMEX that sets up
 # cross-node NVLink (MNNVL) channels, which the device plugin can't do.
 #
-#   gpuResourcesEnabledOverride: false  -> DRA does NOT publish GPU ResourceSlices,
-#                                          so it can't double-allocate GPUs the
-#                                          device plugin already hands out.
-#   computeDomains.enabled: true        -> keep the ComputeDomain / IMEX channel path.
-gpuResourcesEnabledOverride: false
+#   resources.gpus.enabled: false  -> DRA does NOT publish GPU ResourceSlices, so it
+#                                     can't double-allocate GPUs the device plugin
+#                                     already hands out. This is also what satisfies
+#                                     the chart's validation.yaml (which hard-errors
+#                                     when gpus.enabled=true alongside the device
+#                                     plugin, unless you force gpuResourcesEnabledOverride=true).
+#   resources.computeDomains.enabled: true -> keep the ComputeDomain / IMEX channel path.
 nvidiaDriverRoot: "/run/nvidia/driver"
 resources:
+  gpus:
+    enabled: false
   computeDomains:
     enabled: true
 kubeletPlugin:
