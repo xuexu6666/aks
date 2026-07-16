@@ -87,6 +87,22 @@ all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RD
 > **four** NICs (`NCCL_IB_HCA=mlx5`, ~22 GB/s/NIC). For full non-privileged
 > bandwidth, claim 4 NICs (see the upstream `4nic-aligned` template) — TODO here.
 
+## Privilege posture (tested on GB300)
+
+| Test | GPU comms | securityContext | Non-priv? |
+|---|---|---|---|
+| `a` (`nccl-nvlink.yaml`) | intra-node NVLink | none | ✅ |
+| `ib-dra` (`nccl-ib-dra.yaml`) | cross-node IB (dranet) | `IPC_LOCK` | ✅ ~25 GB/s |
+| `ib` (`nccl-ib.yaml`) | cross-node IB (host-mount) | `privileged` | ❌ (fallback) |
+| `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (NVLS) | `privileged` | ❌ — see below |
+
+**MNNVL still needs `privileged`.** ComputeDomains *does* inject the IMEX channel
+(`/dev/nvidia-caps-imex-channels/channel0`) into a non-priv pod, but NCCL's **NVLS
+multicast** setup then crashes with `IPC_LOCK` alone *and* with `IPC_LOCK+SYS_ADMIN`;
+`privileged` runs at **~593 GB/s**. So the CX-usable non-privileged story covers
+**IB and intra-node NVLink**; cross-node NVLink (MNNVL) remains privileged until we
+identify the multicast/fabric device access it needs (future work).
+
 ## Notes / AKS specifics
 
 - **DCGM + dcgm-exporter** are on (GPU metrics, Prometheus-scrapeable). They're

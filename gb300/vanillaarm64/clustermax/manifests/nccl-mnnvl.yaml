@@ -7,6 +7,13 @@
 #
 # Requires: DRA driver with computeDomains.enabled=true (step 3) and its controller
 # scheduled onto a system node. Launcher pinned to a NON-GPU node.
+#
+# PRIVILEGE: unlike ib-dra (non-privileged), this worker needs `privileged: true`.
+# Tested on GB300: ComputeDomains DOES inject the IMEX channel
+# (/dev/nvidia-caps-imex-channels/channel0) into a non-priv pod, but NCCL's NVLS
+# multicast setup then crashes with IPC_LOCK alone AND with IPC_LOCK+SYS_ADMIN.
+# privileged works (~593 GB/s). Making MNNVL non-privileged is future work (needs
+# the multicast/fabric device access that privileged still provides).
 apiVersion: resource.nvidia.com/v1beta1
 kind: ComputeDomain
 metadata: {name: nccl-cd, namespace: __NAMESPACE__}
