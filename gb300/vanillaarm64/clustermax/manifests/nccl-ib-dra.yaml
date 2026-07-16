@@ -62,13 +62,12 @@ spec:
             image: __NCCL_IMAGE__
             securityContext:
               capabilities: {add: ["IPC_LOCK"]}   # RDMA mem-registration; NOT privileged
-              # NOTE: IPC_LOCK *permits* locking but does NOT raise the memlock rlimit.
-              # AKS nodes default to `max locked memory = 8192 KB`, which caps RDMA
-              # buffer registration and throttles NCCL hard (measured ~0.43 GB/s).
-              # Full bandwidth needs the node's containerd to expose unlimited memlock
-              # (LimitMEMLOCK=infinity) so this pod inherits `ulimit -l unlimited`.
-              # See README "Non-privileged IB" — this node-level requirement is the
-              # one asterisk on the otherwise copy-paste-able CX manifest.
+              # IPC_LOCK is all this needs — measured ~25 GB/s single-NIC on a stock
+              # node (8192 KB memlock). Raising node memlock to unlimited
+              # (LimitMEMLOCK=infinity) only adds ~11% (~28 GB/s); it's a nice-to-have,
+              # not a requirement. NB: NCCL_IB_DATA_DIRECT=0 (set on the launcher) is
+              # what keeps this fast — with Data-Direct on, low memlock collapsed it to
+              # ~0.43 GB/s. See README "Non-privileged IB".
             resources:
               limits:
                 nvidia.com/gpu: "1"                # GPU via the device plugin

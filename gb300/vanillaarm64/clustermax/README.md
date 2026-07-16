@@ -66,21 +66,26 @@ their `/dev/infiniband` char devices into ordinary pods via a **DRA claim** + NR
   (RDMA memory registration), *not* full privilege. A CX can copy it as-is — no host mounts.
 - `nccl-ib.yaml` (privileged + hostPath `/dev/infiniband`) is kept as a **fallback**.
 
-**Verified on the live GB300 cluster (14 nodes):** official dranet `v1.3.0` publishes
-all four IB VFs per node — `mlx5_0..mlx5_3`, `dra.net/rdma=true`, **no `ifName`**
-(netdev-less, the IB-only case) — 56 RDMA devices across 14 nodes. A **non-privileged**
-worker (`IPC_LOCK` only) received `/dev/infiniband/uverbs2`, `ibv_devices` listed
-`mlx5_0`, and NCCL ran over it with `NET/IB Data Direct` + `GPU Direct RDMA (DMABUF)`.
+**Verified end-to-end on a fresh 18-node GB300 cluster:** official dranet `v1.3.0`
+publishes all four IB VFs per node — `mlx5_0..mlx5_3`, `dra.net/rdma=true`, **no
+`ifName`** (netdev-less, the IB-only case). A **non-privileged** worker (`IPC_LOCK`
+only) received `/dev/infiniband`, `ibv_devices` listed the VF, and a 2-node NCCL
+all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RDMA —
+**with no node changes at all**.
 
-> **memlock caveat (perf).** `IPC_LOCK` permits locking but does **not** raise the
-> memlock *rlimit*. AKS nodes default to `max locked memory = 8192 KB`, which caps RDMA
-> registration and throttles NCCL to **~0.43 GB/s**. Full bandwidth needs the node's
-> containerd to expose unlimited memlock (`LimitMEMLOCK=infinity` drop-in → pod sees
-> `ulimit -l unlimited`). The privileged `nccl-ib.yaml` sidesteps this because privileged
-> containers get unlimited memlock implicitly. **The full-BW non-privileged number is not
-> yet cleanly validated** — raising node memlock lifted `ulimit -l` to unlimited but the
-> collective then hit an intermittent `unhandled system error` right after a live
-> containerd restart; needs a clean re-test (fresh nodes with the drop-in baked in).
+> **memlock: a minor tune, not a blocker.** Early on, a *different* flag combination
+> (`NCCL_IB_DATA_DIRECT` on) collapsed to **~0.43 GB/s** on the 8 MB-memlock default,
+> which looked like a hard memlock wall. It wasn't: setting **`NCCL_IB_DATA_DIRECT=0`**
+> (the upstream GB300 setting, now in `nccl-ib-dra.yaml`) gives **~25 GB/s single-NIC
+> with the stock 8192 KB memlock and `IPC_LOCK` only** — no node change needed.
+> Raising node memlock to unlimited (`LimitMEMLOCK=infinity` containerd drop-in →
+> pod sees `ulimit -l unlimited`) lifts it to **~28 GB/s (~11%)** — a nice-to-have,
+> not a requirement. (Apply it via a fresh boot / node-image bake, **not** a live
+> containerd restart under load — that path intermittently wedged the collective.)
+>
+> Single-NIC ~25–28 GB/s matches the privileged `nccl-ib.yaml`'s ~88 GB/s being
+> **four** NICs (`NCCL_IB_HCA=mlx5`, ~22 GB/s/NIC). For full non-privileged
+> bandwidth, claim 4 NICs (see the upstream `4nic-aligned` template) — TODO here.
 
 ## Notes / AKS specifics
 
@@ -98,7 +103,7 @@ worker (`IPC_LOCK` only) received `/dev/infiniband/uverbs2`, `ibv_devices` liste
   `apt-get update` at bootstrap.
 
 ## Expected NCCL results
-`a` intra-NVLink **~620 GB/s** · `ib` (privileged) cross-node IB **~88 GB/s** · `mnnvl` cross-node NVLink **~595 GB/s**
-`ib-dra` (non-privileged, official dranet): **functional** (IB GDRDMA confirmed); full-BW number pending the memlock re-test (see caveat above).
+`a` intra-NVLink **~620 GB/s** · `ib` (privileged, 4-NIC) cross-node IB **~88 GB/s** · `mnnvl` cross-node NVLink **~595 GB/s**
+`ib-dra` (non-privileged, official dranet, **1-NIC**): **~25 GB/s** (`IPC_LOCK` only, stock node) → **~28 GB/s** with node memlock unlimited. 4-NIC claim ≈ `ib` — TODO.
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
