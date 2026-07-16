@@ -1,9 +1,9 @@
-# Path C — cross-node NVLink (MNNVL) with the DEVICE PLUGIN + DRA ComputeDomains.
+# Path C — cross-node NVLink (MNNVL) with the GPU DRA driver + DRA ComputeDomains.
 #
-# GPUs come from the device plugin (runtimeClassName nvidia + nvidia.com/gpu), and
-# DRA ComputeDomains provides the IMEX channel automatically (no manual
-# /etc/nvidia-imex). So each worker gets: nvidia.com/gpu:1 (device plugin) + the
-# nccl-cd-channel resource claim (DRA). IB is disabled -> NVLink/NVLS transport.
+# GPUs come from the NVIDIA GPU DRA driver (gpu.nvidia.com), and DRA ComputeDomains
+# provides the IMEX channel automatically (no manual /etc/nvidia-imex). So each worker
+# claims: 1 GPU (gpu-1) + the nccl-cd-channel resource claim (DRA). IB is disabled ->
+# NVLink/NVLS transport.
 #
 # Requires: DRA driver with computeDomains.enabled=true (step 3) and its controller
 # scheduled onto a system node. Launcher pinned to a NON-GPU node.
@@ -68,13 +68,13 @@ spec:
                 topologyKey: kubernetes.io/hostname
           automountServiceAccountToken: false
           resourceClaims:
+          - {name: gpu, resourceClaimTemplateName: gpu-1}
           - {name: imex-channel, resourceClaimTemplateName: nccl-cd-channel}
           containers:
           - name: nccl
             image: __NCCL_IMAGE__
             securityContext: {privileged: true}
             resources:
-              limits:
-                nvidia.com/gpu: "1"          # GPU via the device plugin
               claims:
+              - {name: gpu}                   # GPU via the NVIDIA GPU DRA driver
               - {name: imex-channel}          # IMEX channel via DRA ComputeDomains

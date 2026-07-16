@@ -29,12 +29,8 @@ kubectl -n "${NAMESPACE}" rollout status ds/nvidia-driver-daemonset --timeout=90
 NOTREADY=$(kubectl get nodes -l "agentpool=${NODEPOOL}" --no-headers 2>/dev/null | grep -cw NotReady || true)
 [ "${NOTREADY:-0}" -eq 0 ] || die "${NOTREADY} GB300 node(s) went NotReady after the toolkit — check the containerd drop-in version on the node (should be 2, not 4)."
 
-log "Waiting for the device plugin to advertise nvidia.com/gpu"
-for i in $(seq 1 30); do
-  ADV=$(kubectl get nodes -l "agentpool=${NODEPOOL}" -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{" "}{end}' 2>/dev/null | tr ' ' '\n' | grep -vc '^$' || true)
-  [ "${ADV:-0}" -ge 1 ] && break
-  sleep 15
-done
-ok "nvidia.com/gpu advertised on ${ADV:-0} node(s)"
-kubectl -n "${NAMESPACE}" get pods 2>/dev/null | grep -E "driver|toolkit|device-plugin|dcgm" | head
-ok "GPU Operator up: driver + toolkit(file source) + device-plugin + DCGM + exporter."
+# Device plugin is OFF (values-gpu-operator.yaml) — GPUs are published as
+# gpu.nvidia.com DRA ResourceSlices by the DRA driver in step 03, NOT as
+# nvidia.com/gpu. So nothing to wait for here beyond the driver + toolkit.
+kubectl -n "${NAMESPACE}" get pods 2>/dev/null | grep -E "driver|toolkit|dcgm" | head
+ok "GPU Operator up: driver + toolkit(file source) + DCGM + exporter (device plugin OFF; GPUs via DRA — step 03)."

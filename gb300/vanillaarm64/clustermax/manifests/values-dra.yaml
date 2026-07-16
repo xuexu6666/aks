@@ -1,20 +1,22 @@
-# NVIDIA DRA driver values — ComputeDomains ONLY (coexists with the device plugin).
+# NVIDIA DRA driver values — GPUs + ComputeDomains (device plugin is DISABLED).
 #
-# In this variant the DEVICE PLUGIN owns GPU allocation (nvidia.com/gpu). We use
-# the DRA driver purely for ComputeDomains — the DRA-automated IMEX that sets up
-# cross-node NVLink (MNNVL) channels, which the device plugin can't do.
+# The DRA driver OWNS GPU allocation here (publishes gpu.nvidia.com ResourceSlices),
+# so a workload can claim a GPU and its NUMA-aligned IB NIC (dranet) in ONE claim —
+# the scheduler places them on the same NUMA node, which unlocks GPUDirect RDMA and
+# full IB bandwidth (~56 GB/s/NIC aligned vs ~25 GB/s cross-NUMA). ComputeDomains stays
+# on for MNNVL IMEX channels.
 #
-#   resources.gpus.enabled: false  -> DRA does NOT publish GPU ResourceSlices, so it
-#                                     can't double-allocate GPUs the device plugin
-#                                     already hands out. This is also what satisfies
-#                                     the chart's validation.yaml (which hard-errors
-#                                     when gpus.enabled=true alongside the device
-#                                     plugin, unless you force gpuResourcesEnabledOverride=true).
-#   resources.computeDomains.enabled: true -> keep the ComputeDomain / IMEX channel path.
+#   resources.gpus.enabled: true          -> publish GPU ResourceSlices (DRA owns GPUs).
+#   gpuResourcesEnabledOverride: true     -> REQUIRED to allow gpus.enabled=true; the chart's
+#                                            validation.yaml otherwise hard-errors to prevent
+#                                            double-allocation with the device plugin. Safe here
+#                                            because the device plugin is OFF (values-gpu-operator.yaml).
+#   resources.computeDomains.enabled: true -> keep the ComputeDomain / IMEX channel path (MNNVL).
+gpuResourcesEnabledOverride: true
 nvidiaDriverRoot: "/run/nvidia/driver"
 resources:
   gpus:
-    enabled: false
+    enabled: true
   computeDomains:
     enabled: true
 kubeletPlugin:

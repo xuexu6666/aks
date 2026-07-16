@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Step 5 — run the NCCL tests on the full stack.
-#   a      = Path A intra-node NVLink  (1 pod, 4 GPUs, device plugin)          ~620 GB/s
-#   ib-dra = Path B cross-node IB/RDMA — OFFICIAL dranet, NON-privileged (needs step 05) ~88 GB/s
-#   ib     = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (fallback)  ~88 GB/s
-#   mnnvl  = Path C cross-node NVLink  (2 nodes x1 GPU, device plugin + DRA ComputeDomains) ~595 GB/s
+#   a      = Path A intra-node NVLink  (1 pod, 4 GPUs via DRA)                          ~620 GB/s
+#   ib-dra = Path B cross-node IB/RDMA — dranet + aligned GPU+NIC DRA claim, NON-privileged ~56 GB/s
+#   ib     = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (4-NIC fallback) ~88 GB/s
+#   mnnvl  = Path C cross-node NVLink  (2 nodes x1 GPU via DRA + ComputeDomains)          ~595 GB/s
 #   all    = a, then ib-dra (the CX-usable IB path), then mnnvl
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
@@ -28,7 +28,7 @@ ensure_dranet_ready() {
   local n; n=$(kubectl get resourceslices --field-selector=spec.driver=dra.net --no-headers 2>/dev/null | grep -cve '^\s*$' || true)
   [ "${n:-0}" -ge 1 ] || die "no dra.net ResourceSlices — run ./04-ib-dranet.sh first (installs official dranet)"
   # claim template is namespaced; ensure it exists (idempotent)
-  apply manifests/dranet-nic-claim.yaml
+  apply manifests/dra-claims.yaml
 }
 
 # the MPI launcher must run on a NON-GPU node (a Ready 'system' pool node)
@@ -71,4 +71,4 @@ case "${WHICH}" in
           run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   *) die "usage: $0 [a|ib-dra|ib|mnnvl|all]" ;;
 esac
-ok "NCCL run(s) complete. Expected: A ~620, IB ~88, MNNVL ~595 GB/s."
+ok "NCCL run(s) complete. Expected: A ~620, ib-dra ~56 (1-NIC aligned), MNNVL ~595 GB/s."

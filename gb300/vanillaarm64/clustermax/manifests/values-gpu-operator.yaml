@@ -40,7 +40,8 @@ cdi:
   enabled: true
   nriPluginEnabled: true
 devicePlugin:
-  enabled: true
+  enabled: false        # GPUs are allocated via the NVIDIA GPU DRA driver (see values-dra.yaml),
+                        # NOT the device plugin — so GPU+NIC can be claimed NUMA-aligned for full IB BW.
 dcgm:
   enabled: true
 dcgmExporter:

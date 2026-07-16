@@ -45,9 +45,9 @@ kubectl -n kube-system patch ds dranet --type=json \
 kubectl -n kube-system rollout status ds/dranet --timeout=180s 2>/dev/null || \
   warn "dranet DaemonSet not fully rolled out yet — check 'kubectl -n kube-system get pods -l app=dranet'"
 
-log "Applying DeviceClass (dranet.net) + IB-NIC ResourceClaimTemplate"
+log "Applying DeviceClass (dranet.net) + GPU/NIC DRA claim templates"
 kubectl apply -f manifests/dranet-device-class.yaml
-apply_ns manifests/dranet-nic-claim.yaml
+apply_ns manifests/dra-claims.yaml
 
 log "Waiting for dra.net (IB NIC) ResourceSlices…"
 for i in $(seq 1 20); do

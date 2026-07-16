@@ -1,11 +1,12 @@
-# GB300 on vanilla arm64 — clustermax full-stack (toolkit + device plugin + DCGM + DRA + dranet)
+# GB300 on vanilla arm64 — clustermax full-stack (toolkit + GPU-DRA + DCGM + dranet, NUMA-aligned IB)
 
-The **managed-experience** variant. Where `../deviceplugin` runs the toolkit OFF (and
-mounts the driver by hand) and `../dra` uses pure DRA, this one installs the **whole
-GPU Operator stack** — driver + **container-toolkit** + device plugin + **DCGM** +
-**dcgm-exporter** — plus the **DRA driver for ComputeDomains** (cross-node NVLink) and
-**official dranet** (non-privileged cross-node IB), and runs NCCL. Same vanilla arm64
-image (`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
+The **full-stack** variant. Installs driver (open R580) + **container-toolkit** + **DCGM** +
+**dcgm-exporter** from the GPU Operator (**device plugin OFF**), the **NVIDIA GPU DRA driver**
+(GPUs as `gpu.nvidia.com` ResourceSlices + ComputeDomains for MNNVL), and **official dranet**
+(IB NICs as `dra.net` ResourceSlices). GPUs come from **DRA, not the device plugin**, so a
+workload claims a GPU and its **NUMA-aligned** IB NIC in one DRA request — which is what unlocks
+GPUDirect RDMA and full-bandwidth **non-privileged** IB (~56 GB/s/NIC vs ~25 GB/s cross-NUMA).
+Same vanilla arm64 image (`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
 
 ```bash
 cd gb300/vanillaarm64/clustermax
@@ -16,8 +17,8 @@ cd gb300/vanillaarm64/clustermax
 |---|---|
 | `00-cluster.sh` | AKS cluster, system pool (`D4s_v5`), **k8s 1.35.5** (a baked version — skips the early-boot `apt-get update` that trips the arm64 CSE exit-99 false-positive) |
 | `01-nodepool.sh` | GB300 pool (`Standard_ND128isr_GB300_v6`) on the vanilla arm64 custom image, `--gpu-driver None`, `sku=gpu` taint |
-| `02-gpu-operator.sh` | **Full stack**: driver (open R580) + **toolkit** + device plugin + DCGM + exporter |
-| `03-dra.sh` | DRA driver, **ComputeDomains only** (coexists with the device plugin) + controller patch |
+| `02-gpu-operator.sh` | driver (open R580) + **toolkit** + DCGM + exporter — **device plugin OFF** (GPUs come from DRA) |
+| `03-dra.sh` | NVIDIA DRA driver — **GPUs** (`gpu.nvidia.com`) + **ComputeDomains** (IMEX) + controller patch |
 | `04-ib-dranet.sh` | **Official dranet** (`kubernetes-sigs/dranet` `v1.3.0`) — publishes GB300 IB VFs as `dra.net` ResourceSlices for **non-privileged** IB |
 | `05-nccl.sh` | NCCL `a` (intra-NVLink) / `ib-dra` (cross-node IB, dranet) / `ib` (privileged fallback) / `mnnvl` (cross-node NVLink) / `all` |
 
@@ -25,14 +26,16 @@ cd gb300/vanillaarm64/clustermax
 
 | Mode | Path | securityContext | Bandwidth |
 |---|---|---|---|
-| `a` | intra-node NVLink (4 GPUs, device plugin) | none | **~650 GB/s** |
-| `ib-dra` | cross-node IB — **dranet, 1 NIC** | **`IPC_LOCK`** (non-priv) | **~25 GB/s** |
+| `a` | intra-node NVLink (4 GPUs via DRA) | none | **~650 GB/s** |
+| `ib-dra` | cross-node IB — dranet, **NUMA-aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
 | `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
 | `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~593 GB/s** |
 
-`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Node `LimitMEMLOCK=infinity`
-lifts it ~25 → 28 GB/s (~11%, a nice-to-have); a 4-NIC claim ≈ `ib`. Set `NCCL_IB_DATA_DIRECT=0`.
-See "Privilege posture" below for the MNNVL privileged caveat.
+`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Because GPU **and** NIC are
+claimed in one DRA request, they land on the **same NUMA node** → GPUDirect RDMA → **~56 GB/s/NIC**
+(a *cross-NUMA* pairing drops to ~25 GB/s — the difference is entirely NUMA alignment; see below).
+A 2-NIC aligned claim ≈ ~112 GB/s. `NCCL_IB_DATA_DIRECT=0` is set to keep it healthy.
+See "Privilege posture" for the MNNVL privileged caveat.
 
 ## The one thing that makes the toolkit work on AKS
 
@@ -54,14 +57,19 @@ emits a **v2** drop-in that passes. Validated on GB300: nodes stay `Ready`, drop
 v2 (`io.containerd.grpc.v1.cri`), `nvidia`/`nvidia-cdi`/`nvidia-legacy` runtimes
 registered. `02-gpu-operator.sh` hard-fails if any node flips `NotReady` after the toolkit.
 
-## Device plugin + DRA coexistence
+## Why GPUs go through DRA (not the device plugin) — NUMA-aligned IB
 
-- **Device plugin owns GPU allocation** (`nvidia.com/gpu`, injected by the `nvidia` runtime).
-- **DRA is ComputeDomains-only** (`gpuResourcesEnabledOverride: false`) — it does *not*
-  publish GPU ResourceSlices, so the two never double-allocate a GPU. DRA supplies the
-  **IMEX channel** for cross-node NVLink (MNNVL), which the device plugin can't.
-- MNNVL workers therefore claim **both** `nvidia.com/gpu: 1` (device plugin) and the
-  `nccl-cd-channel` DRA claim (ComputeDomains). See `manifests/nccl-mnnvl.yaml`.
+- **The device plugin is OFF; the NVIDIA GPU DRA driver owns GPUs** (`resources.gpus.enabled=true`
+  + `gpuResourcesEnabledOverride=true`, `values-dra.yaml`). They can't both allocate GPUs, so it's
+  one or the other.
+- **Why DRA:** with the device plugin, the GPU (`nvidia.com/gpu`) and the dranet IB NIC are resolved
+  *independently*, so the NIC almost always lands on the **other NUMA node** → GPUDirect RDMA can't be
+  used → **~25 GB/s**. With DRA you claim the **GPU and its aligned NIC in one request**
+  (`gpu-nic-aligned`: `gpu-0` @ NUMA0 + `mlx5_0` @ NUMA0), so the scheduler co-locates them → GDR → **~56 GB/s**.
+  This mirrors the upstream GB300 example's aligned/unaligned split (~56 vs ~25 GB/s).
+- **GB300 topology** (fixed): `gpu-0/1` + `mlx5_0/1` on NUMA 0; `gpu-2/3` + `mlx5_2/3` on NUMA 1.
+  Claim templates in `manifests/dra-claims.yaml` (`gpus-4`, `gpu-nic-aligned`, `gpu-1`).
+- **MNNVL** workers claim a GPU (`gpu-1`, DRA) **plus** the `nccl-cd-channel` DRA claim (ComputeDomains IMEX).
 
 ## Non-privileged IB via official dranet (step 05)
 
@@ -74,9 +82,9 @@ their `/dev/infiniband` char devices into ordinary pods via a **DRA claim** + NR
 - **This is Anson's IB-only support, now upstream** — his `add-support-for-ib-only-rdma-device`
   work merged into the SIG repo as **PR #77** ("Add IB-only RDMA device support and AKS
   GB300 example"). No personal fork (`ghcr.io/anson627/dranet`) needed anymore.
-- **`nccl-ib-dra.yaml` is non-privileged** — GPU via the device plugin (`nvidia.com/gpu`),
-  IB NIC via the `ib-nic` DRA claim; the only elevated bit is the `IPC_LOCK` capability
-  (RDMA memory registration), *not* full privilege. A CX can copy it as-is — no host mounts.
+- **`nccl-ib-dra.yaml` is non-privileged** — GPU **and** its NUMA-aligned IB NIC come from one
+  DRA claim (`gpu-nic-aligned`); the only elevated bit is the `IPC_LOCK` capability (RDMA memory
+  registration), *not* full privilege. A CX can copy it as-is — no host mounts.
 - `nccl-ib.yaml` (privileged + hostPath `/dev/infiniband`) is kept as a **fallback**.
 
 **Verified end-to-end on a fresh 18-node GB300 cluster:** official dranet `v1.3.0`

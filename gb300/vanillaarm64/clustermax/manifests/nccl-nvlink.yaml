@@ -1,6 +1,6 @@
-# Path A — intra-node NVLink: single pod, 4 GPUs via the DEVICE PLUGIN.
-# Non-privileged, no hostPath: requests nvidia.com/gpu:4, GPUs+libs injected by
-# the nvidia runtime (runtimeClassName: nvidia). VALIDATED ~620 GB/s.
+# Path A — intra-node NVLink: single pod, 4 GPUs via the NVIDIA GPU DRA driver.
+# Non-privileged, no hostPath: claims 4 gpu.nvidia.com devices (gpus-4); GPUs+libs
+# injected by the nvidia runtime (runtimeClassName: nvidia). ~620 GB/s.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -11,10 +11,12 @@ spec:
   restartPolicy: Never
   tolerations:
   - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+  resourceClaims:
+  - {name: gpus, resourceClaimTemplateName: gpus-4}
   containers:
   - name: nccl
     image: __NCCL_IMAGE__
     command: ["bash","-lc","nvidia-smi -L; /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 4"]
     resources:
-      limits:
-        nvidia.com/gpu: "4"
+      claims:
+      - {name: gpus}

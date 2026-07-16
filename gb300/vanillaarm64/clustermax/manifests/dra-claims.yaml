@@ -1,0 +1,53 @@
+# GPU + IB-NIC DRA claim templates (device plugin OFF — DRA owns GPUs).
+#
+# GB300 topology is fixed and known: gpu-0/gpu-1 + mlx5_0/mlx5_1 sit on NUMA 0,
+# gpu-2/gpu-3 + mlx5_2/mlx5_3 on NUMA 1. "aligned" = GPU and NIC on the SAME NUMA
+# node, which is what lets NCCL use GPUDirect RDMA (NODE distance) and hit full IB
+# bandwidth (~56 GB/s/NIC) instead of the cross-NUMA (SYS) ~25 GB/s. Because both the
+# GPU (gpu.nvidia.com) and the NIC (dra.net) are claimed in ONE request, the scheduler
+# places them together. Selectors follow the upstream GB300 example
+# (kubernetes-sigs/dranet examples/azure_aks_examples/gb300).
+---
+# Path A (intra-node NVLink): 4 GPUs, no NIC.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: gpus-4, namespace: __NAMESPACE__}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly: {deviceClassName: gpu.nvidia.com, count: 4}
+---
+# ib-dra (cross-node IB): 1 GPU + its NUMA-aligned IB NIC — gpu-0 (0008:06:00.0, NUMA0)
+# paired with mlx5_0 (NUMA0). One claim, so the scheduler co-locates them on NUMA 0.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: gpu-nic-aligned, namespace: __NAMESPACE__}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly:
+          deviceClassName: gpu.nvidia.com
+          count: 1
+          selectors:
+          - cel: {expression: 'device.attributes["resource.kubernetes.io"].pciBusID == "0008:06:00.0"'}
+      - name: nic
+        exactly:
+          deviceClassName: dranet.net
+          count: 1
+          selectors:
+          - cel: {expression: 'device.attributes["dra.net"]["rdmaDevice"] == "mlx5_0"'}
+---
+# mnnvl (cross-node NVLink): 1 GPU only — the IMEX channel is a separate ComputeDomain claim.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: gpu-1, namespace: __NAMESPACE__}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly: {deviceClassName: gpu.nvidia.com, count: 1}

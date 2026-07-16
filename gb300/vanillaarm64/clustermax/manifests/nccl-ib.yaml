@@ -44,13 +44,15 @@ spec:
               requiredDuringSchedulingIgnoredDuringExecution:
               - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-ib}}
                 topologyKey: kubernetes.io/hostname
+          resourceClaims:
+          - {name: gpu, resourceClaimTemplateName: gpu-1}   # GPU via DRA (device plugin is OFF)
           containers:
           - name: worker
             image: __NCCL_IMAGE__
-            securityContext: {privileged: true}
+            securityContext: {privileged: true}             # host-mounts ALL /dev/infiniband (4 NICs)
             resources:
-              limits:
-                nvidia.com/gpu: "1"
+              claims:
+              - {name: gpu}
             volumeMounts:
             - {name: infiniband, mountPath: /dev/infiniband}
           volumes:
