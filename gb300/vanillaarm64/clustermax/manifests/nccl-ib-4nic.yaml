@@ -1,0 +1,66 @@
+# Path B (DRA, 4-NIC) — cross-node IB/RDMA via dranet, NON-privileged, AGGREGATE bandwidth.
+#
+# Same as nccl-ib-dra.yaml but each worker claims 4 GPUs + all 4 NUMA-aligned RDMA NICs
+# (gpu4-nic4-aligned) and runs -g 4, so the collective uses all four ConnectX VFs at once
+# → ~364 GB/s (validated) instead of the single-NIC ~56. All 4 HCAs are pinned via
+# NCCL_IB_HCA so NCCL rails across mlx5_0..3. Launcher stays on a NON-GPU node (dranet NRI
+# hook disturbs OpenMPI's OOB callback on GB nodes).
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata: {name: nccl-ib-4nic, namespace: __NAMESPACE__}
+spec:
+  slotsPerWorker: 1
+  runPolicy: {cleanPodPolicy: Running}
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          nodeSelector: {agentpool: system}
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            command: ["/bin/bash","-c"]
+            args:
+            - |
+              sleep 20
+              mpirun -np 2 --allow-run-as-root -bind-to none \
+                --mca oob_tcp_if_include eth0 --mca btl_tcp_if_include eth0 \
+                -x LD_LIBRARY_PATH \
+                -x NCCL_DEBUG=INFO \
+                -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=0 \
+                -x NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_2,mlx5_3 \
+                -x NCCL_SHM_DISABLE=1 -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 \
+                -x NCCL_NET_GDR_LEVEL=PHB -x NCCL_IB_DATA_DIRECT=0 \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 16G -f 2 -g 4 -c 0
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          runtimeClassName: nvidia
+          tolerations:
+          - {key: sku, value: gpu, operator: Equal, effect: NoSchedule}
+          - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector: {matchLabels: {training.kubeflow.org/job-name: nccl-ib-4nic, training.kubeflow.org/job-role: worker}}
+                topologyKey: kubernetes.io/hostname
+          automountServiceAccountToken: false
+          resourceClaims:
+          - {name: gpu-nic, resourceClaimTemplateName: gpu4-nic4-aligned}
+          volumes:
+          # k8s default /dev/shm is 64Mi — too small for -g 4 NCCL (intra-node shm
+          # segments). Back it with tmpfs so the 4-GPU collective can allocate.
+          - name: dshm
+            emptyDir: {medium: Memory, sizeLimit: 16Gi}
+          containers:
+          - name: nccl
+            image: __NCCL_IMAGE__
+            securityContext:
+              capabilities: {add: ["IPC_LOCK"]}   # RDMA mem-registration; NOT privileged
+            volumeMounts:
+            - {name: dshm, mountPath: /dev/shm}
+            resources:
+              claims:
+              - {name: gpu-nic}                    # 4 GPU + 4 aligned IB NIC via DRA (one claim)

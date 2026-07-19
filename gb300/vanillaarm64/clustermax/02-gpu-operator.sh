@@ -32,5 +32,5 @@ NOTREADY=$(kubectl get nodes -l "agentpool=${NODEPOOL}" --no-headers 2>/dev/null
 # Device plugin is OFF (values-gpu-operator.yaml) — GPUs are published as
 # gpu.nvidia.com DRA ResourceSlices by the DRA driver in step 03, NOT as
 # nvidia.com/gpu. So nothing to wait for here beyond the driver + toolkit.
-kubectl -n "${NAMESPACE}" get pods 2>/dev/null | grep -E "driver|toolkit|dcgm" | head
+kubectl -n "${NAMESPACE}" get pods 2>/dev/null | grep -E "driver|toolkit|dcgm" | head || true
 ok "GPU Operator up: driver + toolkit(file source) + DCGM + exporter (device plugin OFF; GPUs via DRA — step 03)."

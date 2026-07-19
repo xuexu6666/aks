@@ -16,7 +16,7 @@ spec:
   containers:
   - name: nccl
     image: __NCCL_IMAGE__
-    command: ["bash","-lc","nvidia-smi -L; /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 4"]
+    command: ["bash","-lc","nvidia-smi -L; NCCL_NVLS_ENABLE=0 NCCL_DEBUG=INFO NCCL_DEBUG_SUBSYS=INIT,NVLS,GRAPH /opt/nccl_tests/build/all_reduce_perf -b 512M -e 16G -f 2 -g 4"]
     resources:
       claims:
       - {name: gpus}

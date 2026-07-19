@@ -21,7 +21,15 @@ else
     --gpu-driver None \
     --node-taints "${GPU_TAINT}" \
     --aks-custom-headers "AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}" \
-    || warn "nodepool add returned non-zero — expected when GB300 capacity caps the pinned availability set below ${NODE_COUNT}. Continuing; the readiness check below decides if we have enough."
+    2> >(tee /tmp/gb300-nodepool-err.log >&2) \
+    || {
+      # Only treat a capacity/allocation shortfall as benign; surface everything else.
+      if grep -qiE "capacity|allocat|SkuNotAvailable|zonal|OverconstrainedAllocation|quota" /tmp/gb300-nodepool-err.log; then
+        warn "nodepool add: GB300 capacity/allocation shortfall (expected for a pinned rack). Continuing; the readiness check below decides if we have enough."
+      else
+        die "nodepool add failed for a NON-capacity reason (see error above) — e.g. bad custom header, unregistered SKU/feature, or auth."
+      fi
+    }
   ok "Node pool create submitted"
 fi
 

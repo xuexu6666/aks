@@ -48,3 +48,22 @@ spec:
       requests:
       - name: gpu
         exactly: {deviceClassName: gpu.nvidia.com, count: 1}
+---
+# ib-4nic (max IB): 4 GPUs + all 4 NUMA-aligned RDMA NICs in ONE claim → aggregate IB
+# bandwidth (~364 GB/s validated) instead of the 1-NIC ~56. Uses the upstream NUMA/rdma
+# selector (dra.net/rdma==true) rather than hardcoded mlx5 names, so DRA picks all 4 VFs.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata: {name: gpu4-nic4-aligned, namespace: __NAMESPACE__}
+spec:
+  spec:
+    devices:
+      requests:
+      - name: gpu
+        exactly: {deviceClassName: gpu.nvidia.com, count: 4}
+      - name: nic
+        exactly:
+          deviceClassName: dranet.net
+          count: 4
+          selectors:
+          - cel: {expression: 'device.attributes["dra.net"]["rdma"] == true'}

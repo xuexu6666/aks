@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Step 5 — run the NCCL tests on the full stack.
-#   a      = Path A intra-node NVLink  (1 pod, 4 GPUs via DRA)                          ~620 GB/s
-#   ib-dra = Path B cross-node IB/RDMA — dranet + aligned GPU+NIC DRA claim, NON-privileged ~56 GB/s
-#   ib     = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (4-NIC fallback) ~88 GB/s
-#   mnnvl  = Path C cross-node NVLink  (2 nodes x1 GPU via DRA + ComputeDomains)          ~595 GB/s
-#   all    = a, then ib-dra (the CX-usable IB path), then mnnvl
+# Verified on live GB300 (NVLS off, -e 16G):
+#   a       = Path A intra-node NVLink  (1 pod, 4 GPUs via DRA)                             ~663 GB/s
+#   ib-dra  = Path B cross-node IB/RDMA — dranet + 1 aligned GPU+NIC DRA claim, NON-privileged ~56 GB/s
+#   ib-4nic = Path B cross-node IB/RDMA — 4 GPU + 4 aligned NIC (dranet), NON-privileged     ~223 GB/s
+#   ib      = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (fallback)   ~88 GB/s
+#   mnnvl   = Path C cross-node NVLink  (4 nodes x4 GPU via DRA + ComputeDomains, NVLS off)  ~683 GB/s peak
+#   all     = a, then ib-dra (the CX-usable IB path), then mnnvl
 set -euo pipefail
 cd "$(dirname "$0")"; source ./variables.sh
 
@@ -63,6 +65,7 @@ run_job() {  # $1=jobname $2=manifest  (MPIJob)
 case "${WHICH}" in
   a)      run_pod nccl-nvlink manifests/nccl-nvlink.yaml ;;
   ib-dra) ensure_dranet_ready; ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib-dra manifests/nccl-ib-dra.yaml ;;
+  ib-4nic) ensure_dranet_ready; ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib-4nic manifests/nccl-ib-4nic.yaml ;;
   ib)     ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib     manifests/nccl-ib.yaml ;;
   mnnvl)  ensure_mpi_operator; ensure_launcher_home; run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   all)    run_pod nccl-nvlink manifests/nccl-nvlink.yaml
@@ -71,4 +74,4 @@ case "${WHICH}" in
           run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   *) die "usage: $0 [a|ib-dra|ib|mnnvl|all]" ;;
 esac
-ok "NCCL run(s) complete. Expected: A ~620, ib-dra ~56 (1-NIC aligned), MNNVL ~595 GB/s."
+ok "NCCL run(s) complete (verified GB300, -e 16G, NVLS off): A ~663, ib-dra ~56 (1-NIC), ib-4nic ~223 (4-NIC), MNNVL ~683 GB/s peak (@16G)."

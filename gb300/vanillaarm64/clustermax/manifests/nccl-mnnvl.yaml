@@ -24,7 +24,7 @@ apiVersion: resource.nvidia.com/v1beta1
 kind: ComputeDomain
 metadata: {name: nccl-cd, namespace: __NAMESPACE__}
 spec:
-  numNodes: 2
+  numNodes: 4
   channel:
     resourceClaimTemplate:
       name: nccl-cd-channel
@@ -48,13 +48,14 @@ spec:
             args:
             - |
               sleep 20
-              mpirun -np 2 --allow-run-as-root -bind-to none \
+              mpirun -np 4 --allow-run-as-root -bind-to none \
+                --mca oob_tcp_if_include eth0 --mca btl_tcp_if_include eth0 \
                 -x LD_LIBRARY_PATH -x NCCL_DEBUG=INFO -x NCCL_DEBUG_SUBSYS=INIT,NVLS,GRAPH \
                 -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=1 \
-                -x NCCL_NVLS_ENABLE=1 -x NCCL_MNNVL_ENABLE=1 \
-                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 4G -f 2 -g 1 -c 0
+                -x NCCL_NVLS_ENABLE=0 -x NCCL_MNNVL_ENABLE=1 \
+                /opt/nccl_tests/build/all_reduce_perf -b 512M -e 16G -f 2 -g 4 -c 0
     Worker:
-      replicas: 2
+      replicas: 4
       template:
         spec:
           runtimeClassName: nvidia
@@ -68,13 +69,18 @@ spec:
                 topologyKey: kubernetes.io/hostname
           automountServiceAccountToken: false
           resourceClaims:
-          - {name: gpu, resourceClaimTemplateName: gpu-1}
+          - {name: gpu, resourceClaimTemplateName: gpus-4}
           - {name: imex-channel, resourceClaimTemplateName: nccl-cd-channel}
+          volumes:
+          - name: dshm
+            emptyDir: {medium: Memory, sizeLimit: 16Gi}
           containers:
           - name: nccl
             image: __NCCL_IMAGE__
             securityContext: {privileged: true}
+            volumeMounts:
+            - {name: dshm, mountPath: /dev/shm}
             resources:
               claims:
-              - {name: gpu}                   # GPU via the NVIDIA GPU DRA driver
+              - {name: gpu}                   # 4 GPUs via the NVIDIA GPU DRA driver
               - {name: imex-channel}          # IMEX channel via DRA ComputeDomains
