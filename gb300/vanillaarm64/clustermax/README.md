@@ -140,7 +140,10 @@ is documented *intent*, not a confirmed passing result.
 On our GB300 the non-privileged pod got the IMEX channel injected
 (`/dev/nvidia-caps-imex-channels/channel0`) but the collective still crashed with
 `IPC_LOCK`, `IPC_LOCK+SYS_ADMIN`, and even `NCCL_NVLS_ENABLE=0`; `privileged` runs at
-**~593 GB/s**. This matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)
+**~593 GB/s**. Reconfirmed 2026-07-21 that this is **not scale-specific** — even the smallest
+**1-GPU/node** cross-node MNNVL crashes non-privileged (`IPC_LOCK` only → `free(): double free`
+abort in NCCL `pncclGroupEnd`), while the identical `privileged` run does **642 GB/s**. So **every
+MNNVL path needs `privileged`** today, not just the 4-GPU/node case. This matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)
 (Nov 2025): `Cuda failure 800 'operation not permitted'` on the IMEX-channel path, where
 `privileged: true` is the reporter's confirmed workaround — unresolved upstream. (That
 report is on **GB200**; our crash is **GB300** — a reasonable cross-platform match, but
