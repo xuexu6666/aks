@@ -14,12 +14,14 @@
 # not a documented IMEX requirement). But no bandwidth-verified non-priv MNNVL run is
 # published anywhere. On GB300 the IMEX channel DID inject non-priv
 # (/dev/nvidia-caps-imex-channels/channel0), yet the collective crashed with IPC_LOCK,
-# IPC_LOCK+SYS_ADMIN, and NCCL_NVLS_ENABLE=0. Matches OPEN bug NVIDIA/nccl#1925 (Cuda
-# failure 800 'operation not permitted' on the IMEX path; GB200 there vs GB300 here;
-# privileged is the reporter's workaround too).
-# KNOWN NOT to work (per #1925): SYS_ADMIN+SYS_RESOURCE+IPC_LOCK+SYS_NICE + seccomp/
-# AppArmor Unconfined — the reporter tried that and it still failed. Only untried
-# avenues: a fully-configured IMEX domain, or a newer NVIDIA DRA driver.
+# IPC_LOCK+SYS_ADMIN, and NCCL_NVLS_ENABLE=0 (reconfirmed 1-GPU/node too: free() double-free
+# abort). Matches NVIDIA/nccl#1925 (closed 2025-12-04 as completed) — a non-priv MNNVL
+# container failed and the reporter RESOLVED IT BY DISABLING MNNVL (NCCL_MNNVL_ENABLE=0),
+# not by running MNNVL non-priv. So the working postures are: MNNVL privileged, or MNNVL off
+# + IB non-priv (ib-dra/ib-4nic). No upstream fix for non-priv MNNVL exists.
+# KNOWN NOT to work (per #1925): SYS_ADMIN+SYS_RESOURCE + seccomp/AppArmor Unconfined +
+# allowPrivilegeEscalation — the reporter tried that exact combo and it still failed. Only
+# untried avenues: a fully-configured IMEX domain, or a newer NVIDIA DRA driver.
 apiVersion: resource.nvidia.com/v1beta1
 kind: ComputeDomain
 metadata: {name: nccl-cd, namespace: __NAMESPACE__}

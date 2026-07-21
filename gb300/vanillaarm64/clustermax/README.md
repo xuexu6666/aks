@@ -143,12 +143,16 @@ On our GB300 the non-privileged pod got the IMEX channel injected
 **~593 GB/s**. Reconfirmed 2026-07-21 that this is **not scale-specific** — even the smallest
 **1-GPU/node** cross-node MNNVL crashes non-privileged (`IPC_LOCK` only → `free(): double free`
 abort in NCCL `pncclGroupEnd`), while the identical `privileged` run does **642 GB/s**. So **every
-MNNVL path needs `privileged`** today, not just the 4-GPU/node case. This matches open bug [NCCL #1925](https://github.com/NVIDIA/nccl/issues/1925)
-(Nov 2025): `Cuda failure 800 'operation not permitted'` on the IMEX-channel path, where
-`privileged: true` is the reporter's confirmed workaround — unresolved upstream. (That
-report is on **GB200**; our crash is **GB300** — a reasonable cross-platform match, but
-an inference.) So privileged looks like a **bug/config gap** rather than an inherent
-requirement — but no non-privileged fix is confirmed anywhere yet.
+MNNVL path needs `privileged`** today, not just the 4-GPU/node case. This matches
+[NVIDIA/nccl#1925](https://github.com/NVIDIA/nccl/issues/1925) (opened Nov 2025,
+**closed 2025-12-04 as completed**): a non-privileged NCCL container with **MNNVL** (same
+`cliqueId 0x7ffe` sentinel we see on GB300) failed, and the reporter **resolved it by disabling
+MNNVL** (`NCCL_MNNVL_ENABLE=0`) — running cross-node over IB instead, **not** by finding a way to
+run MNNVL non-privileged. So there is **no upstream fix that makes MNNVL itself run
+non-privileged**; the two working postures are (a) MNNVL **privileged** (our ~593–642 GB/s), or
+(b) **MNNVL off + IB non-privileged** (our `ib-dra` / `ib-4nic` paths). Privileged looks like a
+**bug/config gap** rather than an inherent requirement — but no non-privileged MNNVL fix is
+confirmed anywhere yet.
 
 *Known NOT to work (per #1925):* `SYS_ADMIN + SYS_RESOURCE + IPC_LOCK + SYS_NICE` with
 **seccomp/AppArmor `Unconfined`** + `allowPrivilegeEscalation` — the reporter tried that
