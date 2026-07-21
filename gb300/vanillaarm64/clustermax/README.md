@@ -24,8 +24,7 @@ cd gb300/vanillaarm64/clustermax
 
 ## NCCL results (validated on GB300)
 
-Bandwidth = **busbw at the 16 GB message** (large-message peak), **NVLS off**. Re-validated
-2026-07-21 on a 16-node GB300 cluster (open R580 `580.105.08`, vanilla arm64 image, k8s 1.35.5).
+Bandwidth = **busbw at the 16 GB message** (large-message peak), **NVLS off**.
 
 | Mode | Path | securityContext | Bandwidth |
 |---|---|---|---|
