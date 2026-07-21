@@ -144,8 +144,9 @@ driver + **device plugin** + DCGM exporter + GPU health signals in **NPD**
 (`UnhealthyNvidiaDevicePlugin`, `UnhealthyNvidiaDCGMServices`) — today device-plugin based, for
 device-plugin GPU SKUs (T4/A100/H100…).
 
-**We're extending the managed GPU experience to GB200/GB300 (NVLink)**, where device-plugin
-scheduling isn't enough — providing the managed equivalents of what this route wires by hand:
+**We're extending the managed GPU experience to GB200/GB300 (NVLink)** — targeted for the next
+**2–3 months** — where device-plugin scheduling isn't enough; providing the managed equivalents of
+what this route wires by hand:
 - **Managed DRA** — GPUs published as `gpu.nvidia.com` ResourceSlices (not `nvidia.com/gpu`), so a
   workload can claim a GPU **+ its NUMA-aligned IB NIC** in one request.
 - **Managed ComputeDomains** — IMEX channels for cross-node NVLink (MNNVL).
