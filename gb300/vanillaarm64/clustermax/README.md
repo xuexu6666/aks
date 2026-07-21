@@ -40,6 +40,30 @@ The **4-NIC** aggregate (`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_D
 On the single-NIC `ib-dra` path, Data-Direct must stay **`=0`** — with `-g1` it collapses to ~0.44 GB/s.
 See "Privilege posture" for the MNNVL privileged caveat.
 
+### Full bandwidth matrix (transport × NVLS × scale)
+
+The table above is the per-mode/posture view. The matrix below is the full transport breakdown —
+every GPU-communication path at each scale — directly comparable to the managed-driver page's
+matrix. All busbw at the 16 GB message; measured on this operator/DRA stack (open R580, k8s 1.35.5).
+
+| Test | Transport | busbw @16G |
+|---|---|---|
+| Intra-node, 4 GPU (1 node) | on-node NVLink | ~684 GB/s |
+| Intra-node NVLS, 4 GPU (1 node) | on-node NVLink + in-switch reduction | ~687 GB/s |
+| Cross-node MNNVL, 1 GPU/node (2 ranks) | cross-node NVLink P2P | ~642 GB/s |
+| Cross-node MNNVL, **2-source** NVLS | cross-node NVLink multicast (2 sources) | ~663 GB/s ✅ |
+| Cross-node MNNVL, 4 GPU/node (16 ranks / 4 nodes), NVLS off | cross-node NVLink P2P | ~677–698 GB/s |
+| Cross-node MNNVL, 4 GPU/node, **NVLS on (8-source)** | cross-node NVLink multicast | ❌ `uncorrectable NVLink error` (Xid 145) |
+| Cross-node IB, 1-NIC | InfiniBand GDRDMA | ~56 GB/s |
+| Cross-node IB, 4 GPU/node, 4-NIC (MNNVL off, Data-Direct) | InfiniBand GDRDMA(PCI) | ~378 GB/s |
+| Cross-node IB, 4-NIC privileged host-mount | InfiniBand GDRDMA | ~88 GB/s |
+
+**NVLS boundary reproduced:** 2-source cross-node NVLS works (~663), 8-source (4 GPU/node) faults
+with **Xid 145** — the same switch-side multicast-team gap seen on the managed-driver path,
+independently confirming it's an Azure fabric limit, not a node-software one. Keep
+`NCCL_NVLS_ENABLE=0` for ≥4-GPU/node cross-node runs. (The 8-source row is **not re-run** here — it
+poisons GPUs; it's fully characterized on the Managed-GPU page.)
+
 ## The one thing that makes the toolkit work on AKS
 
 > **`toolkit.env: RUNTIME_CONFIG_SOURCE=file`** (in `manifests/values-gpu-operator.yaml`)
