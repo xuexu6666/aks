@@ -36,8 +36,8 @@ ensure_dranet_ready() {
 # the MPI launcher must run on a NON-GPU node (a Ready 'system' pool node)
 ensure_launcher_home() {
   local n; n=$(kubectl get nodes -l agentpool=system --no-headers 2>/dev/null | grep -cw Ready || true)
-  [ "${n:-0}" -ge 1 ] || { warn "no Ready system node for the launcher; scaling system pool to 1"; \
-    az aks nodepool scale --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n system --node-count 1 >/dev/null 2>&1 || true; \
+  [ "${n:-0}" -ge 1 ] || { warn "no Ready system node for the launcher; scaling system pool to ${SYSTEM_POOL_SIZE}"; \
+    az aks nodepool scale --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n system --node-count "${SYSTEM_POOL_SIZE}" >/dev/null 2>&1 || true; \
     kubectl wait --for=condition=Ready node -l agentpool=system --timeout=300s || true; }
 }
 

@@ -9,8 +9,10 @@ export CLUSTER_NAME="${CLUSTER_NAME:-gb300}"
 export REGION="${REGION:-eastus2}"
 
 # --- System pool (control-plane workloads; created with the cluster) ---------
+# 3 nodes (not 1) so a single system-node loss doesn't take down cluster DNS/addons
+# (coredns, konnectivity, metrics-server) or the MPI launcher's home.
 export SYSTEM_VM_SIZE="${SYSTEM_VM_SIZE:-Standard_D4s_v5}"
-export SYSTEM_POOL_SIZE="${SYSTEM_POOL_SIZE:-1}"
+export SYSTEM_POOL_SIZE="${SYSTEM_POOL_SIZE:-3}"
 
 # --- GPU node pool -----------------------------------------------------------
 export NODEPOOL="${NODEPOOL:-gb300}"
