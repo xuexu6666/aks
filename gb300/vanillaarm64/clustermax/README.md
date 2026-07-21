@@ -58,16 +58,6 @@ Bandwidth = **busbw at the 16 GB message** (large-message peak); NVLS state note
 | `mnnvl` +NVLS (2-src) | cross-node NVLink multicast — 2 sources (1 GPU/node × 2 nodes) | privileged | **~663 GB/s** |
 | `mnnvl` +NVLS (8-src) | cross-node NVLink multicast — 8 sources (4 GPU/node × 2 nodes) | privileged | ❌ **Xid 145** |
 
-`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. The **4-NIC** aggregate
-(`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_DIRECT=1`**; on the single-NIC `ib-dra` path
-Data-Direct must stay **`=0`** (with `-g1` it collapses to ~0.44 GB/s). See "Privilege posture" for
-the MNNVL privileged caveat.
-
-**NVLS boundary:** 2-source cross-node NVLS works (~663); 8-source (4 GPU/node) faults with **Xid 145**
-— the same switch-side multicast-team gap as the managed-driver path, confirming it's an Azure fabric
-limit, not node software. Keep `NCCL_NVLS_ENABLE=0` for ≥4-GPU/node cross-node runs. (The 8-source row
-is **not re-run** — it poisons GPUs; fully characterized on the Managed-GPU page.)
-
 ## The one thing that makes the toolkit work on AKS
 
 > **`toolkit.env: RUNTIME_CONFIG_SOURCE=file`** (in `manifests/values-gpu-operator.yaml`)
