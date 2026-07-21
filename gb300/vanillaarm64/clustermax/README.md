@@ -91,20 +91,10 @@ dranet** — the Kubernetes-SIG project `kubernetes-sigs/dranet` (`registry.k8s.
 pinned at `v1.3.0`. It enumerates the netdev-less IB VFs (PCI fallback) and injects
 their `/dev/infiniband` char devices into ordinary pods via a **DRA claim** + NRI hook.
 
-- **This is Anson's IB-only support, now upstream** — his `add-support-for-ib-only-rdma-device`
-  work merged into the SIG repo as **PR #77** ("Add IB-only RDMA device support and AKS
-  GB300 example"). No personal fork (`ghcr.io/anson627/dranet`) needed anymore.
 - **`nccl-ib-dra.yaml` is non-privileged** — GPU **and** its NUMA-aligned IB NIC come from one
   DRA claim (`gpu-nic-aligned`); the only elevated bit is the `IPC_LOCK` capability (RDMA memory
   registration), *not* full privilege. A CX can copy it as-is — no host mounts.
 - `nccl-ib.yaml` (privileged + hostPath `/dev/infiniband`) is kept as a **fallback**.
-
-**Verified end-to-end on a fresh 18-node GB300 cluster:** official dranet `v1.3.0`
-publishes all four IB VFs per node — `mlx5_0..mlx5_3`, `dra.net/rdma=true`, **no
-`ifName`** (netdev-less, the IB-only case). A **non-privileged** worker (`IPC_LOCK`
-only) received `/dev/infiniband`, `ibv_devices` listed the VF, and a 2-node NCCL
-all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RDMA —
-**with no node changes at all**.
 
 > **Data-Direct: on for 4-NIC, off for 1-NIC — and memlock is a red herring** (measured
 > 2026-07-21). `NCCL_IB_DATA_DIRECT` behaves oppositely by config:
@@ -112,16 +102,11 @@ all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RD
 >   NCCL logs "Data Direct DMA Interface is detected" on all 4 rails and hits full
 >   **GDR(PCI)** bandwidth at the **stock 8 MB memlock**.
 > - **1-NIC / `-g1` (`nccl-ib-dra.yaml`): Data-Direct `=1` → ~0.44 GB/s collapse.** Must
->   stay `=0` (→ ~56 GB/s). This is the config the early "0.43 collapse" was seen on.
+>   stay `=0` (→ ~56 GB/s).
 >
 > **memlock is NOT the lever.** Controlled A/B: 4-NIC Data-Direct-on at **stock 8192 KB**
 > = **377.6** GB/s vs **unlimited** (`LimitMEMLOCK=infinity` / `ulimit -l unlimited` via
-> `SYS_RESOURCE`) = **378.5** — no meaningful difference. So no node reboot / memlock
-> bake is needed; the earlier "raise memlock" guidance is superseded.
->
-> Single-NIC ~25–28 GB/s matches the privileged `nccl-ib.yaml`'s ~88 GB/s being
-> **four** NICs (`NCCL_IB_HCA=mlx5`, ~22 GB/s/NIC). For full non-privileged
-> bandwidth, claim 4 NICs (see the upstream `4nic-aligned` template) — TODO here.
+> `SYS_RESOURCE`) = **378.5** — no meaningful difference. So no node reboot / memlock bake is needed.
 
 ## Privilege posture (tested on GB300)
 
