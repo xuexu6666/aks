@@ -21,6 +21,28 @@ cd gb300/vanillaarm64/clustermax
 | `04-ib-dranet.sh` | **Official dranet** (`kubernetes-sigs/dranet` `v1.3.0`) — publishes GB300 IB VFs as `dra.net` ResourceSlices for **non-privileged** IB |
 | `05-nccl.sh` | NCCL `a` (intra-NVLink) / `ib-dra` (cross-node IB, dranet) / `ib` (privileged fallback) / `mnnvl` (cross-node NVLink) / `all` |
 
+### ResourceSlices ready (after steps 03 + 04)
+
+Once the DRA driver and dranet are up, **every GB300 node publishes three ResourceSlices** —
+GPUs, ComputeDomains/IMEX, and IB NIC VFs — which is what the NCCL workloads claim:
+
+```console
+$ kubectl get resourceslices -o custom-columns=DRIVER:.spec.driver --no-headers | sort | uniq -c
+  16 gpu.nvidia.com              # GPUs (DRA)             — step 03
+  16 compute-domain.nvidia.com   # ComputeDomains / IMEX  — step 03
+  16 dra.net                     # IB NIC VFs (dranet)    — step 04
+
+$ kubectl get resourceslices
+NODE                             DRIVER
+aks-gb300-63873747-vmss000000    gpu.nvidia.com
+aks-gb300-63873747-vmss000000    compute-domain.nvidia.com
+aks-gb300-63873747-vmss000000    dra.net
+aks-gb300-63873747-vmss000001    gpu.nvidia.com
+aks-gb300-63873747-vmss000001    compute-domain.nvidia.com
+aks-gb300-63873747-vmss000001    dra.net
+...   (16 GB300 nodes × 3 drivers = 48 slices, all Ready)
+```
+
 ## NCCL results (validated on GB300)
 
 Bandwidth = **busbw at the 16 GB message** (large-message peak); NVLS state noted per row.
