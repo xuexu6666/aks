@@ -131,13 +131,5 @@ only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA dr
   monitoring only — independent of how GPUs reach pods.
 - **`nvidia-peermem` is not used** — the inbox `linux-azure-nvidia` kernel provides
   GPUDirect RDMA via **dmabuf** (Data-Direct); no OFED needed (`driver.rdma.enabled=false`).
-- **NRI needs no setup** — containerd 2.x enables NRI by default; AKS's 2.3.2 inherits it
-  (`containerd config dump` → `io.containerd.nri.v1.nri disable=false`, and
-  `/var/run/nri/nri.sock` exists — set by no config file, it's the built-in default).
-  dranet is an NRI plugin and just connects.
-- The **MPI launcher runs on a non-GPU (system) node** — the GB nodes' NRI/driver setup
-  disturbs the OpenMPI OOB callback.
-- **k8s must be a baked version** (`1.35.5` for `202606.19.0`) so the node skips
-  `apt-get update` at bootstrap.
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
