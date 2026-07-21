@@ -19,6 +19,14 @@ export SYSTEM_POOL_SIZE="${SYSTEM_POOL_SIZE:-3}"
 # already survives a single node loss regardless of zones.
 export SYSTEM_ZONES="${SYSTEM_ZONES:-}"
 
+# --- DEV-ONLY: run the system pool on GB300 (NOT for CX) ----------------------
+# On some dev subscriptions an idle-VM reclaimer deallocates small system-pool VMs
+# (taking DNS/addons down), while GB300 is exempt. SYSTEM_ON_GB300=1 makes the system
+# pool a GB300 pool (VM_SIZE + vanilla-arm64 custom image) so it stays up. This is a
+# dev workaround only — a GB300 system pool is hugely expensive; never ship it to a CX.
+# When set, keep NODE_COUNT so SYSTEM_POOL_SIZE + NODE_COUNT fits the 18-node rack.
+export SYSTEM_ON_GB300="${SYSTEM_ON_GB300:-0}"
+
 # --- GPU node pool -----------------------------------------------------------
 export NODEPOOL="${NODEPOOL:-gb300}"
 export VM_SIZE="${VM_SIZE:-Standard_ND128isr_GB300_v6}"

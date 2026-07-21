@@ -16,9 +16,18 @@ fi
 if az aks show -g "${RESOURCE_GROUP}" -n "${CLUSTER_NAME}" -o none 2>/dev/null; then
   ok "AKS cluster '${CLUSTER_NAME}' already exists"
 else
-  log "Creating AKS cluster '${CLUSTER_NAME}' (system pool: ${SYSTEM_POOL_SIZE}x ${SYSTEM_VM_SIZE}, k8s ${K8S_VERSION})"
   # Only pass --zones when SYSTEM_ZONES is set (zone support varies by region/sub).
   ZFLAG=""; [ -n "${SYSTEM_ZONES}" ] && ZFLAG="--zones ${SYSTEM_ZONES}"
+  # DEV-ONLY: system pool on GB300 needs the vanilla-arm64 custom image (same headers as
+  # the GPU pool in 01) and no zone pin (GB300 lives in its own availability set).
+  if [ "${SYSTEM_ON_GB300}" = "1" ]; then
+    SYS_SIZE="${VM_SIZE}"; ZFLAG=""
+    SYS_EXTRA="--os-sku Ubuntu2404 --aks-custom-headers AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}"
+    warn "SYSTEM_ON_GB300=1 → system pool on ${SYS_SIZE} (vanilla arm64 custom image). DEV workaround, not for CX."
+  else
+    SYS_SIZE="${SYSTEM_VM_SIZE}"; SYS_EXTRA=""
+  fi
+  log "Creating AKS cluster '${CLUSTER_NAME}' (system pool: ${SYSTEM_POOL_SIZE}x ${SYS_SIZE}, k8s ${K8S_VERSION})"
   az aks create \
     --subscription "${SUBSCRIPTION}" \
     -l "${REGION}" \
@@ -27,9 +36,9 @@ else
     --tier standard \
     --kubernetes-version "${K8S_VERSION}" \
     --nodepool-name system \
-    --node-vm-size "${SYSTEM_VM_SIZE}" \
+    --node-vm-size "${SYS_SIZE}" \
     --node-count "${SYSTEM_POOL_SIZE}" \
-    ${ZFLAG} \
+    ${ZFLAG} ${SYS_EXTRA} \
     --network-plugin azure \
     --generate-ssh-keys
   ok "Cluster created"
