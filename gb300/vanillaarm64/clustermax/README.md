@@ -4,8 +4,7 @@ The **full-stack** variant. Installs driver (open R580) + **container-toolkit** 
 **dcgm-exporter** from the GPU Operator (**device plugin OFF**), the **NVIDIA GPU DRA driver**
 (GPUs as `gpu.nvidia.com` ResourceSlices + ComputeDomains for MNNVL), and **official dranet**
 (IB NICs as `dra.net` ResourceSlices). GPUs come from **DRA, not the device plugin**, so a
-workload claims a GPU and its aligned IB NIC in one DRA request → **~56 GB/s/NIC** non-privileged
-IB (vs ~25 GB/s when the GPU and NIC land apart). Same vanilla arm64 image
+workload claims a GPU and its aligned IB NIC in one DRA request. Same vanilla arm64 image
 (`2404gen2arm64containerd 202606.19.0`), k8s `1.35.5`.
 
 ```bash
