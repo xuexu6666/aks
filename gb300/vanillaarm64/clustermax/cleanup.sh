@@ -22,6 +22,17 @@ else
   # Default to a WAITED delete: --no-wait can silently fail server-side and leave an
   # 18-node GB300 rack billing. Set NO_WAIT=1 only if you will verify deletion yourself.
   log "Deleting resource group '${RESOURCE_GROUP}' (cluster + GB300 pool)"
+  # Safety rails: this deletes the WHOLE RG. Never touch a clustermax* RG, and require an
+  # explicit confirmation (re-type the RG name, or set FORCE=1 for non-interactive runs).
+  case "${RESOURCE_GROUP}" in
+    clustermax*) die "refusing to delete an RG named '${RESOURCE_GROUP}' — clustermax* RGs are off-limits" ;;
+  esac
+  if [ "${FORCE:-0}" != "1" ]; then
+    printf '  !! About to DELETE resource group "%s" (sub %s): cluster "%s" + any GB300 pool.\n' \
+      "${RESOURCE_GROUP}" "${SUBSCRIPTION}" "${CLUSTER_NAME}"
+    read -r -p '  Re-type the resource group name to confirm: ' _confirm
+    [ "${_confirm}" = "${RESOURCE_GROUP}" ] || die "confirmation did not match '${RESOURCE_GROUP}' — aborting"
+  fi
   az group delete -n "${RESOURCE_GROUP}" --yes ${NO_WAIT:+--no-wait}
   if [ -z "${NO_WAIT:-}" ]; then
     az group show -n "${RESOURCE_GROUP}" -o none 2>/dev/null \

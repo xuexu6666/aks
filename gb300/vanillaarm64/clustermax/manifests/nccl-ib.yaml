@@ -1,5 +1,5 @@
-# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU.
-# GPU comes via the DEVICE PLUGIN (runtimeClassName nvidia + nvidia.com/gpu).
+# Path B — cross-node IB / RDMA: 2 nodes x 1 GPU. Privileged fallback (lab-only).
+# GPU comes via the GPU DRA driver (gpu.nvidia.com, claim `gpu-1`) — device plugin is OFF.
 # IB comes via a direct /dev/infiniband mount (privileged) — AKS shared RDMA-netns
 # mode gives verbs access without hostNetwork. NCCL uses the inbox uverbs devices;
 # GDR via inbox dmabuf. (The k8s-rdma-shared-dev-plugin is NOT used here: GB300 IB

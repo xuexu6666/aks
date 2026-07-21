@@ -66,8 +66,8 @@ case "${WHICH}" in
   a)      run_pod nccl-nvlink manifests/nccl-nvlink.yaml ;;
   ib-dra) ensure_dranet_ready; ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib-dra manifests/nccl-ib-dra.yaml ;;
   ib-4nic) ensure_dranet_ready; ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib-4nic manifests/nccl-ib-4nic.yaml ;;
-  ib)     ensure_mpi_operator; ensure_launcher_home; run_job nccl-ib     manifests/nccl-ib.yaml ;;
-  mnnvl)  ensure_mpi_operator; ensure_launcher_home; run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
+  ib)     ensure_mpi_operator; ensure_launcher_home; apply manifests/dra-claims.yaml; run_job nccl-ib     manifests/nccl-ib.yaml ;;
+  mnnvl)  ensure_mpi_operator; ensure_launcher_home; apply manifests/dra-claims.yaml; run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   all)    run_pod nccl-nvlink manifests/nccl-nvlink.yaml
           ensure_mpi_operator; ensure_launcher_home
           ensure_dranet_ready; run_job nccl-ib-dra manifests/nccl-ib-dra.yaml

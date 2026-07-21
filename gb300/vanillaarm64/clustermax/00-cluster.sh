@@ -27,6 +27,7 @@ else
     --nodepool-name system \
     --node-vm-size "${SYSTEM_VM_SIZE}" \
     --node-count "${SYSTEM_POOL_SIZE}" \
+    --zones 1 2 3 \
     --network-plugin azure \
     --generate-ssh-keys
   ok "Cluster created"
