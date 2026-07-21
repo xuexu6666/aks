@@ -23,45 +23,29 @@ cd gb300/vanillaarm64/clustermax
 
 ## NCCL results (validated on GB300)
 
-Bandwidth = **busbw at the 16 GB message** (large-message peak), **NVLS off**.
+Bandwidth = **busbw at the 16 GB message** (large-message peak); NVLS state noted per row.
 
 | Mode | Path | securityContext | Bandwidth |
 |---|---|---|---|
 | `a` | intra-node NVLink (4 GPUs via DRA) | none | **~684 GB/s** |
+| `a` +NVLS | intra-node NVLS (4 GPUs, in-switch reduction) | none | **~687 GB/s** |
 | `ib-dra` | cross-node IB — dranet, **aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
 | `ib-4nic` | cross-node IB — dranet, **4 GPU + 4 aligned NICs** (Data-Direct on) | **`IPC_LOCK`** (non-priv) | **~378 GB/s** |
 | `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
-| `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~677 GB/s** |
+| `mnnvl` 2-rank | cross-node NVLink P2P — 1 GPU/node | privileged | **~642 GB/s** |
+| `mnnvl` +NVLS (2-src) | cross-node NVLink multicast — 2 sources | privileged | **~663 GB/s** |
+| `mnnvl` | cross-node NVLink P2P — 4 GPU/node (NVLS off) | privileged | **~677–698 GB/s** |
+| `mnnvl` +NVLS (8-src) | cross-node NVLink multicast — 4 GPU/node | privileged | ❌ **Xid 145** |
 
-`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Claiming the GPU **and** NIC
-in one DRA request keeps them together (GDR) → **~56 GB/s/NIC**; picking them apart drops to ~25 GB/s.
-The **4-NIC** aggregate (`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_DIRECT=1`** (see below).
-On the single-NIC `ib-dra` path, Data-Direct must stay **`=0`** — with `-g1` it collapses to ~0.44 GB/s.
-See "Privilege posture" for the MNNVL privileged caveat.
+`ib-dra` is the CX-usable path — **non-privileged**, no host mounts. The **4-NIC** aggregate
+(`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_DIRECT=1`**; on the single-NIC `ib-dra` path
+Data-Direct must stay **`=0`** (with `-g1` it collapses to ~0.44 GB/s). See "Privilege posture" for
+the MNNVL privileged caveat.
 
-### Full bandwidth matrix (transport × NVLS × scale)
-
-The table above is the per-mode/posture view. The matrix below is the full transport breakdown —
-every GPU-communication path at each scale — directly comparable to the managed-driver page's
-matrix. All busbw at the 16 GB message; measured on this operator/DRA stack (open R580, k8s 1.35.5).
-
-| Test | Transport | busbw @16G |
-|---|---|---|
-| Intra-node, 4 GPU (1 node) | on-node NVLink | ~684 GB/s |
-| Intra-node NVLS, 4 GPU (1 node) | on-node NVLink + in-switch reduction | ~687 GB/s |
-| Cross-node MNNVL, 1 GPU/node (2 ranks) | cross-node NVLink P2P | ~642 GB/s |
-| Cross-node MNNVL, **2-source** NVLS | cross-node NVLink multicast (2 sources) | ~663 GB/s ✅ |
-| Cross-node MNNVL, 4 GPU/node (16 ranks / 4 nodes), NVLS off | cross-node NVLink P2P | ~677–698 GB/s |
-| Cross-node MNNVL, 4 GPU/node, **NVLS on (8-source)** | cross-node NVLink multicast | ❌ `uncorrectable NVLink error` (Xid 145) |
-| Cross-node IB, 1-NIC | InfiniBand GDRDMA | ~56 GB/s |
-| Cross-node IB, 4 GPU/node, 4-NIC (MNNVL off, Data-Direct) | InfiniBand GDRDMA(PCI) | ~378 GB/s |
-| Cross-node IB, 4-NIC privileged host-mount | InfiniBand GDRDMA | ~88 GB/s |
-
-**NVLS boundary reproduced:** 2-source cross-node NVLS works (~663), 8-source (4 GPU/node) faults
-with **Xid 145** — the same switch-side multicast-team gap seen on the managed-driver path,
-independently confirming it's an Azure fabric limit, not a node-software one. Keep
-`NCCL_NVLS_ENABLE=0` for ≥4-GPU/node cross-node runs. (The 8-source row is **not re-run** here — it
-poisons GPUs; it's fully characterized on the Managed-GPU page.)
+**NVLS boundary:** 2-source cross-node NVLS works (~663); 8-source (4 GPU/node) faults with **Xid 145**
+— the same switch-side multicast-team gap as the managed-driver path, confirming it's an Azure fabric
+limit, not node software. Keep `NCCL_NVLS_ENABLE=0` for ≥4-GPU/node cross-node runs. (The 8-source row
+is **not re-run** — it poisons GPUs; fully characterized on the Managed-GPU page.)
 
 ## The one thing that makes the toolkit work on AKS
 
