@@ -88,17 +88,6 @@ emits a **v2** drop-in that passes. Validated on GB300: nodes stay `Ready`, drop
 v2 (`io.containerd.grpc.v1.cri`), `nvidia`/`nvidia-cdi`/`nvidia-legacy` runtimes
 registered. `02-gpu-operator.sh` hard-fails if any node flips `NotReady` after the toolkit.
 
-## Why GPUs go through DRA (not the device plugin)
-
-- **Device plugin OFF; the GPU DRA driver owns GPUs** (`resources.gpus.enabled=true` +
-  `gpuResourcesEnabledOverride=true`, `values-dra.yaml`) — they can't both allocate GPUs.
-- **Why:** DRA lets you claim the **GPU and its IB NIC in one request** (`gpu-nic-aligned`:
-  `gpu-0` + `mlx5_0`), so they land together → GDR → **~56 GB/s/NIC**. The device plugin resolves
-  GPU and NIC independently → they land apart → **~25 GB/s** (same split as the upstream GB300 example).
-- GB300 topology (fixed): `gpu-0/1`+`mlx5_0/1` together, `gpu-2/3`+`mlx5_2/3` together. Claim
-  templates in `manifests/dra-claims.yaml` (`gpus-4`, `gpu-nic-aligned`, `gpu-1`).
-- **MNNVL** workers claim a GPU (`gpu-1`, DRA) **plus** the `nccl-cd-channel` DRA claim (ComputeDomains IMEX).
-
 ## Non-privileged IB via official dranet (step 05)
 
 The CX-usable IB path. GB300 IB VFs are **RDMA-only** (no netdev) and expose no `umad`,
