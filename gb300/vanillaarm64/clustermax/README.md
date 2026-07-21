@@ -133,3 +133,23 @@ only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA dr
   GPUDirect RDMA via **dmabuf** (Data-Direct); no OFED needed (`driver.rdma.enabled=false`).
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
+
+## Roadmap: toward the AKS managed GPU experience
+
+This route is the **manual / BYO validation** — GPU-operator driver + NVIDIA DRA + dranet +
+ComputeDomains, wired by hand. The productized path is the AKS **[managed GPU experience
+(preview)](https://learn.microsoft.com/en-us/azure/aks/aks-managed-gpu-nodes)**: with
+`--enable-managed-gpu=true` (feature `ManagedGPUExperiencePreview`) AKS installs and maintains the
+driver + **device plugin** + DCGM exporter + GPU health signals in **NPD**
+(`UnhealthyNvidiaDevicePlugin`, `UnhealthyNvidiaDCGMServices`) — today device-plugin based, for
+device-plugin GPU SKUs (T4/A100/H100…).
+
+**We're extending the managed GPU experience to GB200/GB300 (NVLink)**, where device-plugin
+scheduling isn't enough — providing the managed equivalents of what this route wires by hand:
+- **Managed DRA** — GPUs published as `gpu.nvidia.com` ResourceSlices (not `nvidia.com/gpu`), so a
+  workload can claim a GPU **+ its NUMA-aligned IB NIC** in one request.
+- **Managed ComputeDomains** — IMEX channels for cross-node NVLink (MNNVL).
+- **NPD** — GPU health signals extended to the DRA / ComputeDomain components.
+
+Goal: a customer gets the full GB200/GB300 stack **managed by AKS** instead of the manual
+GPU-operator + DRA + dranet setup this route documents.
