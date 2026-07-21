@@ -149,8 +149,10 @@ device-plugin GPU SKUs (T4/A100/H100…).
 what this route wires by hand:
 - **Managed DRA** — GPUs published as `gpu.nvidia.com` ResourceSlices (not `nvidia.com/gpu`), so a
   workload can claim a GPU **+ its NUMA-aligned IB NIC** in one request.
+- **Managed dranet** — GB300 IB NIC VFs published as `dra.net` ResourceSlices for non-privileged IB
+  (the GPU+NIC aligned claim above).
 - **Managed ComputeDomains** — IMEX channels for cross-node NVLink (MNNVL).
-- **NPD** — GPU health signals extended to the DRA / ComputeDomain components.
+- **NPD** — GPU health signals extended to the DRA / dranet / ComputeDomain components.
 
 Goal: a customer gets the full GB200/GB300 stack **managed by AKS** instead of the manual
 GPU-operator + DRA + dranet setup this route documents.
