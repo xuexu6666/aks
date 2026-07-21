@@ -96,17 +96,10 @@ their `/dev/infiniband` char devices into ordinary pods via a **DRA claim** + NR
   registration), *not* full privilege. A CX can copy it as-is — no host mounts.
 - `nccl-ib.yaml` (privileged + hostPath `/dev/infiniband`) is kept as a **fallback**.
 
-> **Data-Direct: on for 4-NIC, off for 1-NIC — and memlock is a red herring** (measured
-> 2026-07-21). `NCCL_IB_DATA_DIRECT` behaves oppositely by config:
-> - **4-NIC / `-g4` (`nccl-ib-4nic.yaml`): Data-Direct `=1` → ~378 GB/s** (vs ~225 off).
->   NCCL logs "Data Direct DMA Interface is detected" on all 4 rails and hits full
->   **GDR(PCI)** bandwidth at the **stock 8 MB memlock**.
-> - **1-NIC / `-g1` (`nccl-ib-dra.yaml`): Data-Direct `=1` → ~0.44 GB/s collapse.** Must
->   stay `=0` (→ ~56 GB/s).
->
-> **memlock is NOT the lever.** Controlled A/B: 4-NIC Data-Direct-on at **stock 8192 KB**
-> = **377.6** GB/s vs **unlimited** (`LimitMEMLOCK=infinity` / `ulimit -l unlimited` via
-> `SYS_RESOURCE`) = **378.5** — no meaningful difference. So no node reboot / memlock bake is needed.
+> **Data-Direct: on for 4-NIC, off for 1-NIC.** `NCCL_IB_DATA_DIRECT` behaves oppositely by config:
+> - **4-NIC / `-g4` (`nccl-ib-4nic.yaml`): Data-Direct `=1` → ~378 GB/s** (vs ~225 off) — works at
+>   the **stock memlock**, no node change needed.
+> - **1-NIC / `-g1` (`nccl-ib-dra.yaml`): Data-Direct `=1` → ~0.44 GB/s collapse.** Must stay `=0` (→ ~56 GB/s).
 
 ## Privilege posture (tested on GB300)
 
