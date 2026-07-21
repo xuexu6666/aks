@@ -63,9 +63,11 @@ spec:
               # IPC_LOCK is all this needs. With the GPU+NIC claimed NUMA-aligned
               # (gpu-nic-aligned), NCCL uses GPUDirect RDMA -> ~56 GB/s/NIC. An
               # *unaligned* pairing (or the old device-plugin split) drops to ~25 GB/s.
-              # NB: NCCL_IB_DATA_DIRECT=0 (on the launcher) keeps it healthy — with
-              # Data-Direct on + stock memlock it collapsed to ~0.43 GB/s. Node
-              # LimitMEMLOCK=infinity adds only a few %. See README "Non-privileged IB".
+              # NB: NCCL_IB_DATA_DIRECT=0 is REQUIRED for this 1-NIC (-g1) path — with
+              # Data-Direct on it collapses to ~0.44 GB/s (reconfirmed 2026-07-21, and it's
+              # NOT a memlock issue: stock 8 MB vs unlimited made no difference). This is
+              # specific to the single-NIC config; the 4-NIC path (nccl-ib-4nic.yaml) DOES
+              # use Data-Direct on for ~378 GB/s. See README "Non-privileged IB".
             resources:
               claims:
               - {name: gpu-nic}                    # GPU + aligned IB NIC via DRA (one claim)

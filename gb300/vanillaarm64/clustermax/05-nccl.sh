@@ -3,7 +3,7 @@
 # Verified on live GB300 (NVLS off, -e 16G):
 #   a       = Path A intra-node NVLink  (1 pod, 4 GPUs via DRA)                             ~663 GB/s
 #   ib-dra  = Path B cross-node IB/RDMA — dranet + 1 aligned GPU+NIC DRA claim, NON-privileged ~56 GB/s
-#   ib-4nic = Path B cross-node IB/RDMA — 4 GPU + 4 aligned NIC (dranet), NON-privileged     ~223 GB/s
+#   ib-4nic = Path B cross-node IB/RDMA — 4 GPU + 4 aligned NIC (dranet, Data-Direct on)     ~378 GB/s
 #   ib      = Path B cross-node IB/RDMA — privileged + hostPath /dev/infiniband (fallback)   ~88 GB/s
 #   mnnvl   = Path C cross-node NVLink  (4 nodes x4 GPU via DRA + ComputeDomains, NVLS off)  ~683 GB/s peak
 #   all     = a, then ib-dra (the CX-usable IB path), then mnnvl
@@ -74,4 +74,4 @@ case "${WHICH}" in
           run_job nccl-mnnvl  manifests/nccl-mnnvl.yaml ;;
   *) die "usage: $0 [a|ib-dra|ib|mnnvl|all]" ;;
 esac
-ok "NCCL run(s) complete (verified GB300, -e 16G, NVLS off): A ~663, ib-dra ~56 (1-NIC), ib-4nic ~223 (4-NIC), MNNVL ~683 GB/s peak (@16G)."
+ok "NCCL run(s) complete (verified GB300, -e 16G, NVLS off): A ~684, ib-dra ~56 (1-NIC), ib-4nic ~378 (4-NIC, Data-Direct on), MNNVL ~698 GB/s peak (@16G)."

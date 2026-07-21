@@ -1,10 +1,16 @@
 # Path B (DRA, 4-NIC) — cross-node IB/RDMA via dranet, NON-privileged, AGGREGATE bandwidth.
 #
 # Same as nccl-ib-dra.yaml but each worker claims 4 GPUs + all 4 NUMA-aligned RDMA NICs
-# (gpu4-nic4-aligned) and runs -g 4, so the collective uses all four ConnectX VFs at once
-# → ~364 GB/s (validated) instead of the single-NIC ~56. All 4 HCAs are pinned via
-# NCCL_IB_HCA so NCCL rails across mlx5_0..3. Launcher stays on a NON-GPU node (dranet NRI
-# hook disturbs OpenMPI's OOB callback on GB nodes).
+# (gpu4-nic4-aligned) and runs -g 4, so the collective uses all four ConnectX VFs at once.
+# All 4 HCAs are pinned via NCCL_IB_HCA so NCCL rails across mlx5_0..3. Launcher stays on a
+# NON-GPU node (dranet NRI hook disturbs OpenMPI's OOB callback on GB nodes).
+#
+# NCCL_IB_DATA_DIRECT=1 → ~378 GB/s (validated), vs ~225 with it off. Unlike the 1-NIC
+# path, the 4-GPU/4-NIC config does NOT collapse with Data-Direct on — NCCL logs "Data
+# Direct DMA Interface is detected" on all 4 rails and reaches full GDR(PCI) bandwidth at
+# the STOCK 8 MB memlock (raising memlock to unlimited makes no difference; measured 377.6
+# vs 378.5). Keep it OFF only for the 1-NIC path (nccl-ib-dra.yaml), where -g1 collapses to
+# ~0.44 GB/s with Data-Direct on.
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata: {name: nccl-ib-4nic, namespace: __NAMESPACE__}
@@ -31,7 +37,7 @@ spec:
                 -x NCCL_SOCKET_IFNAME=eth0 -x NCCL_IB_DISABLE=0 \
                 -x NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_2,mlx5_3 \
                 -x NCCL_SHM_DISABLE=1 -x NCCL_MNNVL_ENABLE=0 -x NCCL_NVLS_ENABLE=0 \
-                -x NCCL_NET_GDR_LEVEL=PHB -x NCCL_IB_DATA_DIRECT=0 \
+                -x NCCL_NET_GDR_LEVEL=PHB -x NCCL_IB_DATA_DIRECT=1 \
                 /opt/nccl_tests/build/all_reduce_perf -b 512M -e 16G -f 2 -g 4 -c 0
     Worker:
       replicas: 2

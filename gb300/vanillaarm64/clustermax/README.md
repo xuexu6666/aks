@@ -30,13 +30,14 @@ Bandwidth = **busbw at the 16 GB message** (large-message peak), **NVLS off**.
 |---|---|---|---|
 | `a` | intra-node NVLink (4 GPUs via DRA) | none | **~684 GB/s** |
 | `ib-dra` | cross-node IB — dranet, **aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
-| `ib-4nic` | cross-node IB — dranet, **4 GPU + 4 aligned NICs** | **`IPC_LOCK`** (non-priv) | **~225 GB/s** |
+| `ib-4nic` | cross-node IB — dranet, **4 GPU + 4 aligned NICs** (Data-Direct on) | **`IPC_LOCK`** (non-priv) | **~378 GB/s** |
 | `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
 | `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~677 GB/s** |
 
 `ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Claiming the GPU **and** NIC
 in one DRA request keeps them together (GDR) → **~56 GB/s/NIC**; picking them apart drops to ~25 GB/s.
-A 2-NIC aligned claim ≈ ~112 GB/s. `NCCL_IB_DATA_DIRECT=0` is set to keep it healthy.
+The **4-NIC** aggregate (`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_DIRECT=1`** (see below).
+On the single-NIC `ib-dra` path, Data-Direct must stay **`=0`** — with `-g1` it collapses to ~0.44 GB/s.
 See "Privilege posture" for the MNNVL privileged caveat.
 
 ## The one thing that makes the toolkit work on AKS
@@ -93,15 +94,18 @@ only) received `/dev/infiniband`, `ibv_devices` listed the VF, and a 2-node NCCL
 all-reduce ran over it at **~25 GB/s (single NIC)** via `NET/IB` + GPU Direct RDMA —
 **with no node changes at all**.
 
-> **memlock: a minor tune, not a blocker.** Early on, a *different* flag combination
-> (`NCCL_IB_DATA_DIRECT` on) collapsed to **~0.43 GB/s** on the 8 MB-memlock default,
-> which looked like a hard memlock wall. It wasn't: setting **`NCCL_IB_DATA_DIRECT=0`**
-> (the upstream GB300 setting, now in `nccl-ib-dra.yaml`) gives **~25 GB/s single-NIC
-> with the stock 8192 KB memlock and `IPC_LOCK` only** — no node change needed.
-> Raising node memlock to unlimited (`LimitMEMLOCK=infinity` containerd drop-in →
-> pod sees `ulimit -l unlimited`) lifts it to **~28 GB/s (~11%)** — a nice-to-have,
-> not a requirement. (Apply it via a fresh boot / node-image bake, **not** a live
-> containerd restart under load — that path intermittently wedged the collective.)
+> **Data-Direct: on for 4-NIC, off for 1-NIC — and memlock is a red herring** (measured
+> 2026-07-21). `NCCL_IB_DATA_DIRECT` behaves oppositely by config:
+> - **4-NIC / `-g4` (`nccl-ib-4nic.yaml`): Data-Direct `=1` → ~378 GB/s** (vs ~225 off).
+>   NCCL logs "Data Direct DMA Interface is detected" on all 4 rails and hits full
+>   **GDR(PCI)** bandwidth at the **stock 8 MB memlock**.
+> - **1-NIC / `-g1` (`nccl-ib-dra.yaml`): Data-Direct `=1` → ~0.44 GB/s collapse.** Must
+>   stay `=0` (→ ~56 GB/s). This is the config the early "0.43 collapse" was seen on.
+>
+> **memlock is NOT the lever.** Controlled A/B: 4-NIC Data-Direct-on at **stock 8192 KB**
+> = **377.6** GB/s vs **unlimited** (`LimitMEMLOCK=infinity` / `ulimit -l unlimited` via
+> `SYS_RESOURCE`) = **378.5** — no meaningful difference. So no node reboot / memlock
+> bake is needed; the earlier "raise memlock" guidance is superseded.
 >
 > Single-NIC ~25–28 GB/s matches the privileged `nccl-ib.yaml`'s ~88 GB/s being
 > **four** NICs (`NCCL_IB_HCA=mlx5`, ~22 GB/s/NIC). For full non-privileged
