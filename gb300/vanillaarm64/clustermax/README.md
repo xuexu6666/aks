@@ -58,6 +58,12 @@ Bandwidth = **busbw at the 16 GB message** (large-message peak); NVLS state note
 | `mnnvl` +NVLS (2-src) | cross-node NVLink multicast — 2 sources (1 GPU/node × 2 nodes) | privileged | **~663 GB/s** |
 | `mnnvl` +NVLS (8-src) | cross-node NVLink multicast — 8 sources (4 GPU/node × 2 nodes) | privileged | ❌ **Xid 145** |
 
+**NVLS boundary:** 2-source cross-node NVLS works (~663); 8-source (4 GPU/node) faults with
+**Xid 145**. The same failure reproduces on the managed-driver stack too, so it isn't specific to
+this route — but the **root cause is not confirmed** from our side. Keep `NCCL_NVLS_ENABLE=0` for
+≥4-GPU/node cross-node runs. (The 8-source row is **not re-run** — it poisons GPUs; see the
+Managed-GPU page for the deeper investigation.)
+
 ## The one thing that makes the toolkit work on AKS
 
 > **`toolkit.env: RUNTIME_CONFIG_SOURCE=file`** (in `manifests/values-gpu-operator.yaml`)
