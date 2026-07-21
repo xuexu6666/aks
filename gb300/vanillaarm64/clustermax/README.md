@@ -33,8 +33,8 @@ Bandwidth = **busbw at the 16 GB message** (large-message peak); NVLS state note
 | `ib-4nic` | cross-node IB — dranet, **4 GPU + 4 aligned NICs** (Data-Direct on) | **`IPC_LOCK`** (non-priv) | **~378 GB/s** |
 | `mnnvl` | cross-node NVLink P2P — 1 GPU/node (2 nodes) | privileged | **~642 GB/s** |
 | `mnnvl` | cross-node NVLink P2P — 4 GPU/node (NVLS off) | privileged | **~677–698 GB/s** |
-| `mnnvl` +NVLS (2-src) | cross-node NVLink multicast — 2 sources | privileged | **~663 GB/s** |
-| `mnnvl` +NVLS (8-src) | cross-node NVLink multicast — 4 GPU/node | privileged | ❌ **Xid 145** |
+| `mnnvl` +NVLS (2-src) | cross-node NVLink multicast — 2 sources (1 GPU/node × 2 nodes) | privileged | **~663 GB/s** |
+| `mnnvl` +NVLS (8-src) | cross-node NVLink multicast — 8 sources (4 GPU/node × 2 nodes) | privileged | ❌ **Xid 145** |
 
 `ib-dra` is the CX-usable path — **non-privileged**, no host mounts. The **4-NIC** aggregate
 (`ib-4nic`) reaches **~378 GB/s** with **`NCCL_IB_DATA_DIRECT=1`**; on the single-NIC `ib-dra` path
