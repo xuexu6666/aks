@@ -106,43 +106,24 @@ their `/dev/infiniband` char devices into ordinary pods via a **DRA claim** + NR
 | Test | GPU comms | securityContext | Non-priv? |
 |---|---|---|---|
 | `a` (`nccl-nvlink.yaml`) | intra-node NVLink | none | ✅ |
-| `ib-dra` (`nccl-ib-dra.yaml`) | cross-node IB (dranet) | `IPC_LOCK` | ✅ ~25 GB/s |
+| `ib-dra` (`nccl-ib-dra.yaml`) | cross-node IB (dranet) | `IPC_LOCK` | ✅ ~56 GB/s |
 | `ib` (`nccl-ib.yaml`) | cross-node IB (host-mount) | `privileged` | ❌ (fallback) |
-| `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (MNNVL/CUMEM fabric; NVLS on top) | `privileged` | ❌ — see below |
+| `mnnvl` (`nccl-mnnvl.yaml`) | cross-node NVLink (MNNVL / IMEX) | `privileged` | ❌ — see below |
 
-**MNNVL: privileged is what works today; non-privileged is NVIDIA's *intent* but not
-a confirmed reality.** NVIDIA's ComputeDomains design goal is to run MNNVL
-**non-privileged** (the DRA driver injects the IMEX channel and treats it as an
-implementation detail), and CoreWeave's GB200 docs show an MNNVL worker with
-`privileged: false`. Note: that CoreWeave example uses **no added capabilities at all** —
-`IPC_LOCK` is an **IB/RDMA** memory-pinning requirement (from the `ib-dra` path), not a
-documented IMEX/NVLink one; don't assume it's the MNNVL unlock. Caveat: I found **no
-bandwidth-verified non-privileged MNNVL run** published anywhere — the non-priv posture
-is documented *intent*, not a confirmed passing result.
+**MNNVL requires `privileged` today — at every scale.** A non-privileged pod gets the IMEX channel
+injected (`/dev/nvidia-caps-imex-channels/channel0`) but the collective crashes (`IPC_LOCK`,
+`IPC_LOCK+SYS_ADMIN`, even `NCCL_NVLS_ENABLE=0`). Reconfirmed 2026-07-21 down to the smallest
+**1-GPU/node** case (`IPC_LOCK` only → `free(): double free` in NCCL `pncclGroupEnd`), while the
+identical `privileged` run does **642 GB/s**. This matches
+[NVIDIA/nccl#1925](https://github.com/NVIDIA/nccl/issues/1925) (closed 2025-12-04): a non-privileged
+MNNVL container failed and was resolved by **disabling MNNVL** (`NCCL_MNNVL_ENABLE=0`), not by
+running it non-privileged. So the two working postures are **(a) MNNVL privileged** (~593–642 GB/s),
+or **(b) MNNVL off + IB non-privileged** (`ib-dra` / `ib-4nic`). No verified non-privileged MNNVL run
+exists.
 
-On our GB300 the non-privileged pod got the IMEX channel injected
-(`/dev/nvidia-caps-imex-channels/channel0`) but the collective still crashed with
-`IPC_LOCK`, `IPC_LOCK+SYS_ADMIN`, and even `NCCL_NVLS_ENABLE=0`; `privileged` runs at
-**~593 GB/s**. Reconfirmed 2026-07-21 that this is **not scale-specific** — even the smallest
-**1-GPU/node** cross-node MNNVL crashes non-privileged (`IPC_LOCK` only → `free(): double free`
-abort in NCCL `pncclGroupEnd`), while the identical `privileged` run does **642 GB/s**. So **every
-MNNVL path needs `privileged`** today, not just the 4-GPU/node case. This matches
-[NVIDIA/nccl#1925](https://github.com/NVIDIA/nccl/issues/1925) (opened Nov 2025,
-**closed 2025-12-04 as completed**): a non-privileged NCCL container with **MNNVL** (same
-`cliqueId 0x7ffe` sentinel we see on GB300) failed, and the reporter **resolved it by disabling
-MNNVL** (`NCCL_MNNVL_ENABLE=0`) — running cross-node over IB instead, **not** by finding a way to
-run MNNVL non-privileged. So there is **no upstream fix that makes MNNVL itself run
-non-privileged**; the two working postures are (a) MNNVL **privileged** (our ~593–642 GB/s), or
-(b) **MNNVL off + IB non-privileged** (our `ib-dra` / `ib-4nic` paths). Privileged looks like a
-**bug/config gap** rather than an inherent requirement — but no non-privileged MNNVL fix is
-confirmed anywhere yet.
-
-*Known NOT to work (per #1925):* `SYS_ADMIN + SYS_RESOURCE + IPC_LOCK + SYS_NICE` with
-**seccomp/AppArmor `Unconfined`** + `allowPrivilegeEscalation` — the reporter tried that
-exact combo and it **still failed**. So capability/seccomp tweaks are a dead end. The
-only genuinely untried avenues are a **fully-configured IMEX domain** or a **newer
-NVIDIA DRA driver**. (Anson sidesteps MNNVL entirely — his upstream runs **IB-only**
-with `NCCL_MNNVL_ENABLE=0` / `NCCL_NVLS_ENABLE=0`.)
+*Dead end (per #1925):* `SYS_ADMIN + SYS_RESOURCE + IPC_LOCK` with Unconfined seccomp/AppArmor +
+`allowPrivilegeEscalation` was tried and still failed — capability/seccomp tweaks don't help. The
+only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA driver.
 
 ## Notes / AKS specifics
 
