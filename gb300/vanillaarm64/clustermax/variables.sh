@@ -13,6 +13,11 @@ export REGION="${REGION:-eastus2}"
 # (coredns, konnectivity, metrics-server) or the MPI launcher's home.
 export SYSTEM_VM_SIZE="${SYSTEM_VM_SIZE:-Standard_D4s_v5}"
 export SYSTEM_POOL_SIZE="${SYSTEM_POOL_SIZE:-3}"
+# Optional zonal spread for the system pool (extra HA). Leave empty for portability —
+# not every region/subscription supports the same zones (e.g. eastus2 here supports
+# only "2 3", not "1"). Set e.g. SYSTEM_ZONES="2 3" where supported. The 3-node count
+# already survives a single node loss regardless of zones.
+export SYSTEM_ZONES="${SYSTEM_ZONES:-}"
 
 # --- GPU node pool -----------------------------------------------------------
 export NODEPOOL="${NODEPOOL:-gb300}"

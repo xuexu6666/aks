@@ -17,6 +17,8 @@ if az aks show -g "${RESOURCE_GROUP}" -n "${CLUSTER_NAME}" -o none 2>/dev/null; 
   ok "AKS cluster '${CLUSTER_NAME}' already exists"
 else
   log "Creating AKS cluster '${CLUSTER_NAME}' (system pool: ${SYSTEM_POOL_SIZE}x ${SYSTEM_VM_SIZE}, k8s ${K8S_VERSION})"
+  # Only pass --zones when SYSTEM_ZONES is set (zone support varies by region/sub).
+  ZFLAG=""; [ -n "${SYSTEM_ZONES}" ] && ZFLAG="--zones ${SYSTEM_ZONES}"
   az aks create \
     --subscription "${SUBSCRIPTION}" \
     -l "${REGION}" \
@@ -27,7 +29,7 @@ else
     --nodepool-name system \
     --node-vm-size "${SYSTEM_VM_SIZE}" \
     --node-count "${SYSTEM_POOL_SIZE}" \
-    --zones 1 2 3 \
+    ${ZFLAG} \
     --network-plugin azure \
     --generate-ssh-keys
   ok "Cluster created"
