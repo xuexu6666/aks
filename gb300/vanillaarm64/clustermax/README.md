@@ -24,12 +24,16 @@ cd gb300/vanillaarm64/clustermax
 
 ## NCCL results (validated on GB300)
 
+Bandwidth = **busbw at the 16 GB message** (large-message peak), **NVLS off**. Re-validated
+2026-07-21 on a 16-node GB300 cluster (open R580 `580.105.08`, vanilla arm64 image, k8s 1.35.5).
+
 | Mode | Path | securityContext | Bandwidth |
 |---|---|---|---|
-| `a` | intra-node NVLink (4 GPUs via DRA) | none | **~650 GB/s** |
+| `a` | intra-node NVLink (4 GPUs via DRA) | none | **~684 GB/s** |
 | `ib-dra` | cross-node IB — dranet, **aligned GPU+NIC**, 1 NIC | **`IPC_LOCK`** (non-priv) | **~56 GB/s** |
+| `ib-4nic` | cross-node IB — dranet, **4 GPU + 4 aligned NICs** | **`IPC_LOCK`** (non-priv) | **~225 GB/s** |
 | `ib` | cross-node IB — host-mount, 4 NICs | privileged | **~88 GB/s** |
-| `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~593 GB/s** |
+| `mnnvl` | cross-node NVLink (MNNVL / IMEX) | privileged | **~677 GB/s** |
 
 `ib-dra` is the CX-usable path — **non-privileged**, no host mounts. Claiming the GPU **and** NIC
 in one DRA request keeps them together (GDR) → **~56 GB/s/NIC**; picking them apart drops to ~25 GB/s.
