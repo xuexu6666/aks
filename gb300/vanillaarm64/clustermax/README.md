@@ -134,6 +134,34 @@ only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA dr
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
 
+## Why the optional GB300 system pool (`SYSTEM_ON_GB300`) — dev-only
+
+**Not for CX.** The default ships a cheap `D4s_v5` system pool. This knob exists only for a
+reclaim-happy **dev subscription**:
+
+- **Problem:** an out-of-band idle-VM reclaimer on the dev sub deallocates idle VMs — including
+  the cheap `D4s_v5` **system** pool (it runs only low-utilization addons). When it's deallocated,
+  coredns / konnectivity / metrics-server go Pending → **in-cluster DNS drops, cluster unusable** —
+  even though the busy GB300 GPU nodes stay up. It's unlogged (no Deallocate event) and not
+  SKU/tag-driven; it targets *idle utilization*.
+- **Key fact:** **GB300 is exempt** from the reclaim (confirmed by the sub owner) — GB300 nodes stay
+  allocated regardless of utilization.
+- **Workaround (`SYSTEM_ON_GB300=1`):** make the **system pool GB300** so it's always-on → addons run
+  on reclaim-exempt nodes → DNS never drops. The GB300 system pool is **untainted**, so any pod (from
+  a lost bootstrap node or elsewhere) reschedules onto it natively — no tolerations needed.
+
+**Why it's a two-step create** (not one `az aks create`):
+1. **GB300 must be a full 18-node rack** — *"Capacity must be a multiple of 18 for SKUs that support
+   vertical connect"* (NVLink). A GB300 system pool can't be 3 nodes; it's 18.
+2. **`az aks create` can't pass `--gpu-driver None`.** The GB300 vanilla image ships containerd with
+   `nvidia-container-runtime` as the **default** runtime; without `--gpu-driver None` that binary is
+   absent → **every pod sandbox fails** (`fork/exec /usr/bin/nvidia-container-runtime: no such file or
+   directory`) → azure-cns can't run → CNI never initializes → nodes stuck `NotReady`. So GB300 can't
+   be the initial create pool.
+3. **Fix:** `00` bootstraps a cheap `D4s_v5` system pool via `az aks create`; `01` then adds the GB300
+   pool as **`--mode System --gpu-driver None`** (which resets containerd to the `runc` default, so
+   nodes join Ready). Delete the D4s_v5 bootstrap → GB300 is the sole always-on system pool.
+
 ## Roadmap: AKS managed GPU experience for GB200/GB300 — next 2–3 months
 
 This route is the **manual / BYO validation** — GPU-operator driver + NVIDIA DRA + dranet +
