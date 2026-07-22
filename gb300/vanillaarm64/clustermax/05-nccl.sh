@@ -12,7 +12,7 @@ cd "$(dirname "$0")"; source ./variables.sh
 
 WHICH="${1:-all}"
 
-apply() { sed -e "s|__NAMESPACE__|${NAMESPACE}|g" -e "s|__NCCL_IMAGE__|${NCCL_IMAGE}|g" "$1" | kubectl apply -f - ; }
+apply() { sed -e "s|__NAMESPACE__|${NAMESPACE}|g" -e "s|__NCCL_IMAGE__|${NCCL_IMAGE}|g" -e "s|__LAUNCHER_POOL__|${SYSTEM_AGENTPOOL}|g" "$1" | kubectl apply -f - ; }
 
 ensure_mpi_operator() {
   if ! kubectl get deploy -n mpi-operator mpi-operator >/dev/null 2>&1; then
@@ -33,12 +33,19 @@ ensure_dranet_ready() {
   apply manifests/dra-claims.yaml
 }
 
-# the MPI launcher must run on a NON-GPU node (a Ready 'system' pool node)
+# the MPI launcher must run on a Ready node in ${SYSTEM_AGENTPOOL} (the 'system' pool by
+# default; the GB300 pool itself when SYSTEM_ON_GB300=1, since there is no system pool).
 ensure_launcher_home() {
-  local n; n=$(kubectl get nodes -l agentpool=system --no-headers 2>/dev/null | grep -cw Ready || true)
-  [ "${n:-0}" -ge 1 ] || { warn "no Ready system node for the launcher; scaling system pool to ${SYSTEM_POOL_SIZE}"; \
-    az aks nodepool scale --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n system --node-count "${SYSTEM_POOL_SIZE}" >/dev/null 2>&1 || true; \
-    kubectl wait --for=condition=Ready node -l agentpool=system --timeout=300s || true; }
+  local n; n=$(kubectl get nodes -l "agentpool=${SYSTEM_AGENTPOOL}" --no-headers 2>/dev/null | grep -cw Ready || true)
+  [ "${n:-0}" -ge 1 ] && return 0
+  # Only auto-scale a dedicated 'system' pool. Never scale the GB300 pool (pinned 18-node rack).
+  if [ "${SYSTEM_ON_GB300:-0}" = "1" ]; then
+    warn "no Ready ${SYSTEM_AGENTPOOL} node for the launcher — expected GB300 nodes Ready; check the pool."
+  else
+    warn "no Ready ${SYSTEM_AGENTPOOL} node for the launcher; scaling to ${SYSTEM_POOL_SIZE}"
+    az aks nodepool scale --subscription "${SUBSCRIPTION}" -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n "${SYSTEM_AGENTPOOL}" --node-count "${SYSTEM_POOL_SIZE}" >/dev/null 2>&1 || true
+    kubectl wait --for=condition=Ready node -l "agentpool=${SYSTEM_AGENTPOOL}" --timeout=300s || true
+  fi
 }
 
 run_pod() {  # $1=name $2=manifest  (single Pod)

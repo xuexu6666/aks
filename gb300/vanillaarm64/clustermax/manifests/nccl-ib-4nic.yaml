@@ -22,7 +22,7 @@ spec:
       replicas: 1
       template:
         spec:
-          nodeSelector: {agentpool: system}
+          nodeSelector: {agentpool: __LAUNCHER_POOL__}
           containers:
           - name: nccl
             image: __NCCL_IMAGE__

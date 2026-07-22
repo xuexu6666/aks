@@ -33,6 +33,15 @@ export SYSTEM_ON_GB300="${SYSTEM_ON_GB300:-0}"
 # --- GPU node pool -----------------------------------------------------------
 export NODEPOOL="${NODEPOOL:-gb300}"
 export VM_SIZE="${VM_SIZE:-Standard_ND128isr_GB300_v6}"
+
+# Non-GPU home for the DRA ComputeDomains controller + MPI launcher. Normally the `system`
+# pool; with SYSTEM_ON_GB300=1 there is no separate system pool, so they run on the GB300
+# pool (${NODEPOOL}) instead — otherwise they'd be stuck Pending on the missing system pool.
+if [ "${SYSTEM_ON_GB300}" = "1" ]; then
+  export SYSTEM_AGENTPOOL="${SYSTEM_AGENTPOOL:-${NODEPOOL}}"
+else
+  export SYSTEM_AGENTPOOL="${SYSTEM_AGENTPOOL:-system}"
+fi
 export NODE_COUNT="${NODE_COUNT:-18}"
 export K8S_VERSION="${K8S_VERSION:-1.35.5}"
 export GPU_TAINT="${GPU_TAINT:-sku=gpu:NoSchedule}"

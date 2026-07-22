@@ -29,7 +29,7 @@ for i in $(seq 1 12); do
 done
 kubectl patch deploy -n "${NAMESPACE}" nvidia-dra-driver-gpu-controller --type=json -p='[
   {"op":"remove","path":"/spec/template/spec/affinity"},
-  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"agentpool":"system"}}
+  {"op":"add","path":"/spec/template/spec/nodeSelector","value":{"agentpool":"'"${SYSTEM_AGENTPOOL}"'"}}
 ]' 2>/dev/null || warn "controller patch skipped (already patched or absent)"
 
 kubectl -n "${NAMESPACE}" rollout status deploy/nvidia-dra-driver-gpu-controller --timeout=180s 2>/dev/null || \

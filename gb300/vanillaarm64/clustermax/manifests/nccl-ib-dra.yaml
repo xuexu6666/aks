@@ -21,7 +21,7 @@ spec:
       replicas: 1
       template:
         spec:
-          nodeSelector: {agentpool: system}   # launcher off the GB nodes (see note)
+          nodeSelector: {agentpool: __LAUNCHER_POOL__}   # launcher off the GB nodes (see note)
           containers:
           - name: nccl
             image: __NCCL_IMAGE__
