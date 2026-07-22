@@ -8,7 +8,15 @@ az account set --subscription "${SUBSCRIPTION}"
 if az aks nodepool show -g "${RESOURCE_GROUP}" --cluster-name "${CLUSTER_NAME}" -n "${NODEPOOL}" -o none 2>/dev/null; then
   ok "Node pool '${NODEPOOL}' already exists — skipping create"
 else
-  log "Creating GB300 node pool '${NODEPOOL}' (${NODE_COUNT}x ${VM_SIZE}) on vanilla arm64 image"
+  # DEV-ONLY (SYSTEM_ON_GB300=1): make the GB300 pool the SYSTEM pool — a system pool can't
+  # carry the sku=gpu taint (it must run critical addons), so drop it and set --mode System.
+  # Default (CX): --mode User + sku=gpu taint so GPU nodes are dedicated to GPU workloads.
+  if [ "${SYSTEM_ON_GB300}" = "1" ]; then
+    POOL_FLAGS="--mode System"
+  else
+    POOL_FLAGS="--mode User --node-taints ${GPU_TAINT}"
+  fi
+  log "Creating GB300 node pool '${NODEPOOL}' (${NODE_COUNT}x ${VM_SIZE}, ${POOL_FLAGS}) on vanilla arm64 image"
   az aks nodepool add \
     --subscription "${SUBSCRIPTION}" \
     --resource-group "${RESOURCE_GROUP}" \
@@ -19,7 +27,7 @@ else
     --node-count "${NODE_COUNT}" \
     --os-sku Ubuntu2404 \
     --gpu-driver None \
-    --node-taints "${GPU_TAINT}" \
+    ${POOL_FLAGS} \
     --aks-custom-headers "AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}" \
     2> >(tee /tmp/gb300-nodepool-err.log >&2) \
     || {
