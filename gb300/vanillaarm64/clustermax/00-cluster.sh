@@ -25,8 +25,10 @@ else
     # has no binary and EVERY pod sandbox fails (azure-cns can't run -> CNI never inits -> nodes
     # stuck NotReady). So bootstrap with a cheap D4s_v5 system pool; 01 then adds the GB300 pool
     # as --mode System --gpu-driver None (which resets containerd to the runc default).
-    SYS_SIZE="Standard_D4s_v5"; SYS_CNT="1"; ZFLAG=""
-    warn "SYSTEM_ON_GB300=1 → bootstrap 1x D4s_v5 system pool; GB300 system pool added in 01. DEV only, not for CX."
+    # Bootstrap the D4s_v5 system pool at SYSTEM_POOL_SIZE (default 3) so the DRA controller +
+    # MPI launcher (which must run on a non-GPU node) have an HA home once GB300 joins.
+    SYS_SIZE="Standard_D4s_v5"; SYS_CNT="${SYSTEM_POOL_SIZE}"; ZFLAG=""
+    warn "SYSTEM_ON_GB300=1 → bootstrap ${SYS_CNT}x D4s_v5 system pool; GB300 system pool added in 01. DEV only, not for CX."
   else
     SYS_SIZE="${SYSTEM_VM_SIZE}"; SYS_CNT="${SYSTEM_POOL_SIZE}"
   fi
