@@ -22,7 +22,8 @@ else
   # the GPU pool in 01) and no zone pin (GB300 lives in its own availability set).
   if [ "${SYSTEM_ON_GB300}" = "1" ]; then
     SYS_SIZE="${VM_SIZE}"; ZFLAG=""
-    SYS_EXTRA="--os-sku Ubuntu2404 --aks-custom-headers AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}"
+    # Same vanilla-arm64 custom image + BYO driver (--gpu-driver None) as the GPU pool in 01.
+    SYS_EXTRA="--os-sku Ubuntu2404 --gpu-driver None --aks-custom-headers AKSHTTPCustomFeatures=Microsoft.ContainerService/UseCustomizedOSImage,OSImageSubscriptionID=${OS_IMAGE_SUB},OSImageResourceGroup=${OS_IMAGE_RG},OSImageGallery=${OS_IMAGE_GALLERY},OSImageName=${OS_IMAGE_NAME},OSImageVersion=${OS_IMAGE_VERSION}"
     warn "SYSTEM_ON_GB300=1 → system pool on ${SYS_SIZE} (vanilla arm64 custom image). DEV workaround, not for CX."
   else
     SYS_SIZE="${SYSTEM_VM_SIZE}"; SYS_EXTRA=""
