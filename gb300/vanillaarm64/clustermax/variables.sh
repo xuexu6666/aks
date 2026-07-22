@@ -24,7 +24,10 @@ export SYSTEM_ZONES="${SYSTEM_ZONES:-}"
 # (taking DNS/addons down), while GB300 is exempt. SYSTEM_ON_GB300=1 makes the system
 # pool a GB300 pool (VM_SIZE + vanilla-arm64 custom image) so it stays up. This is a
 # dev workaround only — a GB300 system pool is hugely expensive; never ship it to a CX.
-# When set, keep NODE_COUNT so SYSTEM_POOL_SIZE + NODE_COUNT fits the 18-node rack.
+# NOTE: GB300 supports NVLink "vertical connect", so a GB300 VMSS capacity MUST be a
+# multiple of 18 ("Capacity must be a multiple of 18 for SKUs that support vertical connect").
+# So a GB300 system pool must be a FULL 18-node rack (SYSTEM_POOL_SIZE=18) and there is no
+# separate GPU pool — the 18 system nodes run both control-plane addons and GPU workloads.
 export SYSTEM_ON_GB300="${SYSTEM_ON_GB300:-0}"
 
 # --- GPU node pool -----------------------------------------------------------
