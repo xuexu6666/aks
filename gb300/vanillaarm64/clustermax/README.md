@@ -134,6 +134,24 @@ only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA dr
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
 
+## Shared access from the login node (`/shared/aksgb300`)
+
+For folks sharing a CycleCloud/HPC login node, the cluster's **kubeconfig + `kubectl` + `helm`** live
+on the shared NFS at **`/shared/aksgb300`** — same path on every node, no per-user install. Anyone
+on the cluster can use them:
+
+```bash
+source /shared/aksgb300/env.sh      # sets KUBECONFIG + puts kubectl & helm on PATH
+kubectl get nodes
+helm list -A
+```
+
+Make it automatic (one-time): `echo 'source /shared/aksgb300/env.sh' >> ~/.bashrc && source ~/.bashrc`
+
+`/shared/aksgb300/` holds: `kubeconfig` (admin), `kubectl`, `helm`, `env.sh`, `README` — all
+world-readable/executable.
+> ⚠️ It's the **cluster-admin** kubeconfig: everyone with node access can modify/delete the cluster, not just view it.
+
 ## Why the optional GB300 system pool
 
 On the dev subscription, idle VMs — including the cheap `D4s_v5` system pool — can get
