@@ -14,7 +14,7 @@ cd gb300/vanillaarm64/clustermax
 
 | Step | Does |
 |---|---|
-| `00-cluster.sh` | AKS cluster, system pool (**3× `D4s_v5`** for HA — one node loss won't take down DNS/addons/launcher), **k8s 1.35.5** (a baked version — skips the early-boot `apt-get update` that trips the arm64 CSE exit-99 false-positive) |
+| `00-cluster.sh` | AKS cluster, system pool (**3× `D4s_v5`** for HA — one node loss won't take down DNS/addons/launcher), **k8s 1.35.5** |
 | `01-nodepool.sh` | GB300 pool (`Standard_ND128isr_GB300_v6`) on the vanilla arm64 custom image, `--gpu-driver None`; **`--mode User` + `sku=gpu` taint** (default, for GPU-node isolation) — dropped for **`--mode System`, no taint** when `SYSTEM_ON_GB300=1` |
 | `02-gpu-operator.sh` | driver (open R580) + **toolkit** + DCGM + exporter — **device plugin OFF** (GPUs come from DRA) |
 | `03-dra.sh` | NVIDIA DRA driver — **GPUs** (`gpu.nvidia.com`) + **ComputeDomains** (IMEX) + controller patch |
