@@ -148,8 +148,7 @@ helm list -A
 
 Make it automatic (one-time): `echo 'source /shared/aksgb300/env.sh' >> ~/.bashrc && source ~/.bashrc`
 
-`/shared/aksgb300/` holds: `kubeconfig` (admin), `kubectl`, `helm`, `env.sh`, `README` — all
-world-readable/executable.
+`/shared/aksgb300/` holds: `kubeconfig` (admin), `kubectl`, `helm`, `env.sh`, `README`.
 
 ## Why the optional GB300 system pool
 
