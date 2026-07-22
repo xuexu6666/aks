@@ -134,7 +134,7 @@ only untried avenues are a fully-configured IMEX domain or a newer NVIDIA DRA dr
 
 Cleanup: `./cleanup.sh` (deletes the RG) or `KEEP_RG=1 ./cleanup.sh` (charts only).
 
-## Why the optional GB300 system pool (`SYSTEM_ON_GB300`) — dev-only
+## Why the optional GB300 system pool
 
 On the dev subscription, idle VMs — including the cheap `D4s_v5` system pool — can get
 **deallocated**, which takes cluster DNS/addons down. GB300 is exempt, so `SYSTEM_ON_GB300=1` uses
